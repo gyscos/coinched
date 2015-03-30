@@ -2,3 +2,6 @@
 name = "coinched"
 version = "0.0.1"
 authors = ["Alexandre Bury <alexandre.bury@gmail.com>"]
+
+[dependencies]
+rand = "0.3.3"
