@@ -4,7 +4,7 @@ use self::rand::{thread_rng,Rng};
 use std::num::wrapping::Wrapping;
 
 #[derive(PartialEq,Copy)]
-pub struct Suit(u32);
+pub struct Suit(pub u32);
 pub const HEART: Suit = Suit(1 << 0);
 pub const SPADE: Suit = Suit(1 << 8);
 pub const DIAMOND: Suit = Suit(1 << 16);
@@ -28,7 +28,7 @@ impl Suit {
 
 
 #[derive(PartialEq,Copy)]
-pub struct Rank(u32);
+pub struct Rank(pub u32);
 pub const RANK_7: Rank = Rank(1 << 0);
 pub const RANK_8: Rank = Rank(1 << 1);
 pub const RANK_9: Rank = Rank(1 << 2);
@@ -60,7 +60,7 @@ impl Rank {
 }
 
 #[derive(PartialEq,Copy)]
-pub struct Card(u32);
+pub struct Card(pub u32);
 
 impl Card {
     pub fn id(self) -> u32 {
@@ -133,7 +133,7 @@ fn card_test() {
 }
 
 #[derive(PartialEq,Copy)]
-pub struct Hand(u32);
+pub struct Hand(pub u32);
 
 pub fn new_hand() -> Hand {
     Hand(0)
