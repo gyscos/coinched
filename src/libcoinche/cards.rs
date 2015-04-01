@@ -1,3 +1,5 @@
+//! This module represents a basic, rule-agnostic 32-cards system
+
 extern crate rand;
 
 use self::rand::{thread_rng,Rng};
@@ -44,6 +46,7 @@ pub fn get_rank(n: u32) -> Rank {
 }
 
 impl Rank {
+
     pub fn to_string(self) -> String {
         match self {
             RANK_7 => "7",
@@ -101,6 +104,7 @@ impl Card {
         let s = self.suit();
         r.to_string() + &s.to_string()
     }
+
 }
 
 pub fn make_card(suit: Suit, rank: Rank) -> Card {
@@ -271,6 +275,18 @@ impl Deck {
         self.cards.len()
     }
 
+    pub fn deal_each(&mut self, hands: &mut [Hand; 4], n: usize) {
+        if self.len() < 4*n {
+            panic!("Deck has too few cards!");
+        }
+
+        for hand in hands.iter_mut() {
+            for _ in 0..n {
+                hand.add(self.draw());
+            }
+        }
+    }
+
     pub fn to_string(&self) -> String {
         let mut s = "[".to_string();
 
@@ -301,44 +317,4 @@ fn test_deck() {
     }
 }
 
-pub fn deal_each(d: &mut Deck, hands: &mut [Hand; 4], n: usize) {
-    if d.len() < 4*n {
-        panic!("Deck has too few cards!");
-    }
 
-    for hand in hands.iter_mut() {
-        for _ in 0..n {
-            hand.add(d.draw());
-        }
-    }
-}
-
-pub fn deal_hands() -> [Hand; 4] {
-    let mut hands = [new_hand(); 4];
-
-    let mut d = new_deck();
-    d.shuffle();
-
-    deal_each(&mut d, &mut hands, 3);
-    deal_each(&mut d, &mut hands, 2);
-    deal_each(&mut d, &mut hands, 3);
-
-    hands
-}
-
-#[test]
-fn test_deals() {
-    let hands = deal_hands();
-
-    let mut count = [0; 32];
-    for hand in hands.iter() {
-        assert!(hand.size() == 8);
-        for card in hand.list().iter() {
-            count[card.id() as usize] += 1;
-        }
-    }
-
-    for c in count.iter() {
-        assert!(*c == 1);
-    }
-}
