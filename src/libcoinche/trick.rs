@@ -1,3 +1,5 @@
+//! This module implements a trick in a game of coinchet vec
+
 use super::pos;
 use super::cards;
 use super::points;
@@ -5,6 +7,13 @@ use super::points;
 pub struct Trick {
     pub cards: [cards::Card; 4],
     pub first: pos::PlayerPos,
+}
+
+pub fn empty_trick(first: pos::PlayerPos) -> Trick {
+    Trick {
+        first: first,
+        cards: [cards::Card(0); 4],
+    }
 }
 
 impl Trick {

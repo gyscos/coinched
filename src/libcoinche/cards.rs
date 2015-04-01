@@ -1,4 +1,4 @@
-//! This module represents a basic, rule-agnostic 32-cards system
+//! This module represents a basic, rule-agnostic 32-cards system.
 
 extern crate rand;
 

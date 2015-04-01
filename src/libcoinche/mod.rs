@@ -1,3 +1,5 @@
+//! Module that represents a game of coinche.
+
 pub mod cards;
 pub mod bid;
 pub mod game;
