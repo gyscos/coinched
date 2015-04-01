@@ -3,7 +3,7 @@
 extern crate rand;
 
 use self::rand::{thread_rng,Rng};
-use std::num::wrapping::Wrapping;
+use std::num::Wrapping;
 
 #[derive(PartialEq,Copy)]
 pub struct Suit(pub u32);
