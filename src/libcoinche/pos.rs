@@ -30,6 +30,14 @@ impl PlayerPos {
         }
     }
 
+    pub fn next_n(self, n: usize) -> PlayerPos {
+        if n == 0 {
+            self
+        } else {
+            self.next().next_n(n-1)
+        }
+    }
+
     pub fn prev(self) -> PlayerPos {
         if self.0 == 0 {
             PlayerPos(3)
@@ -38,7 +46,7 @@ impl PlayerPos {
         }
     }
 
-    pub fn next_n(self, n: usize) -> PlayerIterator {
+    pub fn until_n(self, n: usize) -> PlayerIterator {
         PlayerIterator {
             current:self,
             remaining: n,
@@ -52,7 +60,7 @@ impl PlayerPos {
     // Iterate on every player between self included and other excluded.
     pub fn until(self, other: PlayerPos) -> PlayerIterator {
         let d = self.distance_until(other);
-        self.next_n(d)
+        self.until_n(d)
     }
 }
 

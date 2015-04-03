@@ -57,15 +57,19 @@ pub struct Contract {
 
 pub struct Auction {
     history: Vec<Contract>,
-    pass_count: i32,
+    pass_count: usize,
+    first: pos::PlayerPos,
     stopped: bool,
+    players: [cards::Hand; 4],
 }
 
-pub fn new_auction() -> Auction {
+pub fn new_auction(first: pos::PlayerPos) -> Auction {
     Auction {
         history: Vec::new(),
         pass_count: 0,
         stopped: false,
+        first: first,
+        players: super::deal_hands(),
     }
 }
 
@@ -76,9 +80,20 @@ impl Auction {
             return Err("auction is closed".to_string());
         }
 
+        if contract.coinche_level != 0 {
+            return Err("cannot bid pre-coinched contract".to_string());
+        }
+
         if !self.history.is_empty() {
-            if contract.target.score() < self.history[self.history.len()-1].target.score() {
+            if contract.author != self.current_contract().expect("no contract found").author.next_n(self.pass_count + 1) {
+                return Err("wrong player order".to_string());
+            }
+            if contract.target.score() <= self.history[self.history.len()-1].target.score() {
                 return Err("must bid higher than current contract".to_string());
+            }
+        } else {
+            if contract.author != self.first.next_n(self.pass_count) {
+                return Err(format!("wrong player order: expected {}", self.first.next_n(self.pass_count).0));
             }
         }
 
@@ -89,6 +104,18 @@ impl Auction {
 
         // Only stops the bids if the guy asked for a capot
         Ok(self.stopped)
+    }
+
+    pub fn current_contract(&self) -> Option<&Contract> {
+        if self.history.is_empty() {
+            None
+        } else {
+            Some(&self.history[self.history.len() - 1])
+        }
+    }
+
+    pub fn hands(&self) -> &[cards::Hand; 4] {
+        &self.players
     }
 
     pub fn pass(&mut self) -> bool {
@@ -123,20 +150,20 @@ impl Auction {
     }
 
     // Moves the auction to kill it
-    pub fn complete(mut self, first: pos::PlayerPos) -> Result<game::GameState,String> {
+    pub fn complete(mut self) -> Result<game::GameState,String> {
         if !self.stopped {
             Err("auction is still running".to_string())
         } else if self.history.is_empty() {
             Err("no contract to start the game with".to_string())
         } else {
-            Ok(game::new_game(first, self.history.pop().expect("contract history empty")))
+            Ok(game::new_game(self.first, self.players, self.history.pop().expect("contract history empty")))
         }
     }
 }
 
 #[test]
 fn test_auction() {
-    let mut auction = new_auction();
+    let mut auction = new_auction(pos::PlayerPos(0));
 
     assert!(!auction.stopped);
 
@@ -147,15 +174,27 @@ fn test_auction() {
 
     // Someone bids.
     assert_eq!(auction.bid(Contract{
-        author: pos::PlayerPos(0),
+        author: pos::PlayerPos(3),
         trump: cards::HEART,
         target: Target::Contract80,
         coinche_level: 0,
     }), Ok(false));
+    assert_eq!(auction.bid(Contract{
+        author: pos::PlayerPos(0),
+        trump: cards::CLUB,
+        target: Target::Contract80,
+        coinche_level: 0,
+    }).ok(), None);
+    assert_eq!(auction.bid(Contract{
+        author: pos::PlayerPos(1),
+        trump: cards::CLUB,
+        target: Target::Contract100,
+        coinche_level: 0,
+    }).ok(), None);
     assert!(!auction.pass());
     // Partner surbids
     assert_eq!(auction.bid(Contract{
-        author: pos::PlayerPos(0),
+        author: pos::PlayerPos(1),
         trump: cards::HEART,
         target: Target::Contract100,
         coinche_level: 0,
@@ -166,7 +205,7 @@ fn test_auction() {
 
     assert!(auction.stopped);
 
-    match auction.complete(pos::PlayerPos(0)) {
+    match auction.complete() {
         Err(_) => assert!(false),
         _=> {},
     }

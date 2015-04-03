@@ -6,7 +6,7 @@ use super::trick;
 use super::bid;
 use super::points;
 
-// GameState describes the state of a coinche game.
+// GameState describes the state of a coinche game, ready to play a card.
 pub struct GameState {
     pub players: [cards::Hand; 4],
     pub current: pos::PlayerPos,
@@ -17,10 +17,10 @@ pub struct GameState {
 }
 
 
-pub fn new_game(first: pos::PlayerPos, contract: bid::Contract) -> GameState {
+pub fn new_game(first: pos::PlayerPos, hands: [cards::Hand; 4], contract: bid::Contract) -> GameState {
     // Create a new game, deal cards to each player
     GameState {
-        players: super::deal_hands(),
+        players: hands,
         current: first,
         contract: contract,
         current_trick: trick::empty_trick(first),
