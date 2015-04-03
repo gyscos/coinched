@@ -74,8 +74,8 @@ pub fn new_auction(first: pos::PlayerPos) -> Auction {
 }
 
 impl Auction {
-    // Bid a new, higher contract.
-    pub fn bid(&mut self, contract: Contract) -> Result<bool,String> {
+
+    fn can_bid(&self, contract: &Contract) -> Result<(),String> {
         if self.stopped {
             return Err("auction is closed".to_string());
         }
@@ -95,6 +95,16 @@ impl Auction {
             if contract.author != self.first.next_n(self.pass_count) {
                 return Err(format!("wrong player order: expected {}", self.first.next_n(self.pass_count).0));
             }
+        }
+
+        Ok(())
+    }
+
+    // Bid a new, higher contract.
+    pub fn bid(&mut self, contract: Contract) -> Result<bool,String> {
+        match self.can_bid(&contract) {
+            Err(msg) => return Err(msg),
+            Ok(_) => (),
         }
 
         self.stopped = contract.target == Target::ContractCapot;
