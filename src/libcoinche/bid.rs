@@ -95,7 +95,13 @@ impl Auction {
         self.pass_count += 1;
 
         // After 3 passes, we're back to the contract author, and we can start.
-        self.stopped = self.pass_count == 3;
+        let pass_limit = if !self.history.is_empty() {
+            3
+        } else {
+            4
+        };
+
+        self.stopped = self.pass_count == pass_limit;
 
         self.stopped
     }
@@ -134,6 +140,34 @@ fn test_auction() {
 
     assert!(!auction.stopped);
 
+    // First three people pass.
     assert!(!auction.pass());
     assert!(!auction.pass());
+    assert!(!auction.pass());
+
+    // Someone bids.
+    assert_eq!(auction.bid(Contract{
+        author: pos::PlayerPos(0),
+        trump: cards::HEART,
+        target: Target::Contract80,
+        coinche_level: 0,
+    }), Ok(false));
+    assert!(!auction.pass());
+    // Partner surbids
+    assert_eq!(auction.bid(Contract{
+        author: pos::PlayerPos(0),
+        trump: cards::HEART,
+        target: Target::Contract100,
+        coinche_level: 0,
+    }), Ok(false));
+    assert!(!auction.pass());
+    assert!(!auction.pass());
+    assert!(auction.pass());
+
+    assert!(auction.stopped);
+
+    match auction.complete(pos::PlayerPos(0)) {
+        Err(_) => assert!(false),
+        _=> {},
+    }
 }
