@@ -73,6 +73,57 @@ fn has_higher(hand: cards::Hand, trump: cards::Suit, strength: i32) -> bool {
     false
 }
 
+#[test]
+fn test_has_higher_1() {
+    // Simple case: X is always higher than Q.
+    let mut hand = cards::new_hand();
+
+    hand.add(cards::make_card(cards::HEART, cards::RANK_8));
+    hand.add(cards::make_card(cards::SPADE, cards::RANK_X));
+    assert!(has_higher(hand, cards::SPADE, points::trump_strength(cards::RANK_Q)));
+}
+
+#[test]
+fn test_has_higher_2() {
+    // Test that we don't mix colors
+    let mut hand = cards::new_hand();
+
+    hand.add(cards::make_card(cards::HEART, cards::RANK_8));
+    hand.add(cards::make_card(cards::SPADE, cards::RANK_X));
+    assert!(!has_higher(hand, cards::HEART, points::trump_strength(cards::RANK_Q)));
+}
+
+#[test]
+fn test_has_higher_3() {
+    // In the trump order, X is lower than 9
+    let mut hand = cards::new_hand();
+
+    hand.add(cards::make_card(cards::HEART, cards::RANK_J));
+    hand.add(cards::make_card(cards::SPADE, cards::RANK_X));
+    assert!(!has_higher(hand, cards::SPADE, points::trump_strength(cards::RANK_9)));
+}
+
+#[test]
+fn test_has_higher_4() {
+    // In the trump order, J is higher than A
+    let mut hand = cards::new_hand();
+
+    hand.add(cards::make_card(cards::HEART, cards::RANK_8));
+    hand.add(cards::make_card(cards::SPADE, cards::RANK_J));
+    assert!(has_higher(hand, cards::SPADE, points::trump_strength(cards::RANK_A)));
+}
+
+#[test]
+fn test_has_higher_5() {
+    // Test when we have no trump at all
+    let mut hand = cards::new_hand();
+
+    hand.add(cards::make_card(cards::HEART, cards::RANK_J));
+    hand.add(cards::make_card(cards::DIAMOND, cards::RANK_J));
+    hand.add(cards::make_card(cards::SPADE, cards::RANK_J));
+    assert!(!has_higher(hand, cards::CLUB, points::trump_strength(cards::RANK_7)));
+}
+
 fn highest_trump(trick: &trick::Trick, trump: cards::Suit, player: pos::PlayerPos) -> i32 {
     let mut highest = -1;
 

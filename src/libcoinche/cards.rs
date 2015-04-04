@@ -152,6 +152,10 @@ impl Hand {
         self.0 &= !card.0;
     }
 
+    pub fn clean(&mut self) {
+        *self = new_hand();
+    }
+
     pub fn has(self, card: Card) -> bool {
         (self.0 & card.0) != 0
     }
