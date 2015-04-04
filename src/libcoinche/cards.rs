@@ -5,7 +5,7 @@ extern crate rand;
 use self::rand::{thread_rng,Rng};
 use std::num::Wrapping;
 
-#[derive(PartialEq,Copy)]
+#[derive(PartialEq,Clone,Copy)]
 pub struct Suit(pub u32);
 pub const HEART: Suit = Suit(1 << 0);
 pub const SPADE: Suit = Suit(1 << 8);
@@ -29,7 +29,7 @@ impl Suit {
 }
 
 
-#[derive(PartialEq,Copy)]
+#[derive(PartialEq,Clone,Copy)]
 pub struct Rank(pub u32);
 pub const RANK_7: Rank = Rank(1 << 0);
 pub const RANK_8: Rank = Rank(1 << 1);
@@ -62,7 +62,7 @@ impl Rank {
     }
 }
 
-#[derive(PartialEq,Copy)]
+#[derive(PartialEq,Clone,Copy)]
 pub struct Card(pub u32);
 
 impl Card {
@@ -136,7 +136,7 @@ fn card_test() {
     }
 }
 
-#[derive(PartialEq,Copy)]
+#[derive(PartialEq,Clone,Copy)]
 pub struct Hand(pub u32);
 
 pub fn new_hand() -> Hand {

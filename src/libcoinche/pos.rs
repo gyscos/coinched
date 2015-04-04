@@ -1,4 +1,4 @@
-#[derive(PartialEq,Copy)]
+#[derive(PartialEq,Clone,Copy)]
 pub struct PlayerPos(pub usize);
 
 pub struct PlayerIterator {
