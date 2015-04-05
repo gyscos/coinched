@@ -1,4 +1,6 @@
 #[derive(PartialEq,Clone,Copy)]
+pub struct Team(pub usize);
+#[derive(PartialEq,Clone,Copy,Debug)]
 pub struct PlayerPos(pub usize);
 
 pub struct PlayerIterator {
@@ -21,10 +23,23 @@ impl Iterator for PlayerIterator {
     }
 }
 
+pub const P0: PlayerPos = PlayerPos(0);
+pub const P1: PlayerPos = PlayerPos(1);
+pub const P2: PlayerPos = PlayerPos(2);
+pub const P3: PlayerPos = PlayerPos(3);
+
 impl PlayerPos {
+    pub fn team(self) -> Team {
+        Team(self.0 % 2)
+    }
+
+    pub fn is_partner(self, other: PlayerPos) -> bool {
+        self.team() == other.team()
+    }
+
     pub fn next(self) -> PlayerPos {
-        if self.0 == 3 {
-            PlayerPos(0)
+        if self == P3 {
+            P0
         } else {
             PlayerPos(self.0+1)
         }
@@ -39,8 +54,8 @@ impl PlayerPos {
     }
 
     pub fn prev(self) -> PlayerPos {
-        if self.0 == 0 {
-            PlayerPos(3)
+        if self == P0 {
+            P3
         } else {
             PlayerPos(self.0 - 1)
         }

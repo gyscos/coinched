@@ -7,11 +7,13 @@ use super::points;
 pub struct Trick {
     pub cards: [cards::Card; 4],
     pub first: pos::PlayerPos,
+    pub winner: pos::PlayerPos,
 }
 
 pub fn empty_trick(first: pos::PlayerPos) -> Trick {
     Trick {
         first: first,
+        winner: first,
         cards: [cards::Card(0); 4],
     }
 }
@@ -37,6 +39,19 @@ impl Trick {
         }
 
         best
+    }
+
+    pub fn play_card(&mut self, player: pos::PlayerPos, card: cards::Card, trump: cards::Suit) -> bool {
+        self.cards[player.0] = card;
+        if player == self.first {
+            return false;
+        }
+
+        if points::strength(card, trump) > points::strength(self.cards[self.winner.0], trump) {
+            self.winner = player
+        }
+
+        (player == self.first.prev())
     }
 }
 

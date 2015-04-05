@@ -144,8 +144,9 @@ pub fn new_hand() -> Hand {
 }
 
 impl Hand {
-    pub fn add(&mut self, card: Card) {
+    pub fn add(&mut self, card: Card) -> &mut Hand {
         self.0 |= card.0;
+        self
     }
 
     pub fn remove(&mut self, card: Card) {
