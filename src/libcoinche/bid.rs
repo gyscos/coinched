@@ -90,6 +90,10 @@ pub enum BidError {
 
 impl Auction {
 
+    pub fn get_state(&self) -> AuctionState {
+        self.state
+    }
+
     fn can_bid(&self, contract: &Contract) -> Result<(),BidError> {
         if self.state != AuctionState::Bidding {
             return Err(BidError::AuctionClosed);
