@@ -55,11 +55,18 @@ pub struct Contract {
     pub coinche_level: i32,
 }
 
+#[derive(PartialEq,Clone,Copy,Debug)]
+pub enum AuctionState {
+    Bidding,
+    Coinching,
+    Over,
+}
+
 pub struct Auction {
     history: Vec<Contract>,
     pass_count: usize,
     first: pos::PlayerPos,
-    stopped: bool,
+    state: AuctionState,
     players: [cards::Hand; 4],
 }
 
@@ -67,33 +74,41 @@ pub fn new_auction(first: pos::PlayerPos) -> Auction {
     Auction {
         history: Vec::new(),
         pass_count: 0,
-        stopped: false,
+        state: AuctionState::Bidding,
         first: first,
         players: super::deal_hands(),
     }
 }
 
+#[derive(PartialEq,Debug)]
+pub enum BidError {
+    AuctionClosed,
+    PreCoinchedContract,
+    TurnError,
+    NonRaisedTarget,
+}
+
 impl Auction {
 
-    fn can_bid(&self, contract: &Contract) -> Result<(),String> {
-        if self.stopped {
-            return Err("auction is closed".to_string());
+    fn can_bid(&self, contract: &Contract) -> Result<(),BidError> {
+        if self.state != AuctionState::Bidding {
+            return Err(BidError::AuctionClosed);
         }
 
         if contract.coinche_level != 0 {
-            return Err("cannot bid pre-coinched contract".to_string());
+            return Err(BidError::PreCoinchedContract);
         }
 
         if !self.history.is_empty() {
             if contract.author != self.current_contract().expect("no contract found").author.next_n(self.pass_count + 1) {
-                return Err("wrong player order".to_string());
+                return Err(BidError::TurnError);
             }
             if contract.target.score() <= self.history[self.history.len()-1].target.score() {
-                return Err("must bid higher than current contract".to_string());
+                return Err(BidError::NonRaisedTarget);
             }
         } else {
             if contract.author != self.first.next_n(self.pass_count) {
-                return Err(format!("wrong player order: expected {}", self.first.next_n(self.pass_count).0));
+                return Err(BidError::TurnError);
             }
         }
 
@@ -101,19 +116,21 @@ impl Auction {
     }
 
     // Bid a new, higher contract.
-    pub fn bid(&mut self, contract: Contract) -> Result<bool,String> {
+    pub fn bid(&mut self, contract: Contract) -> Result<AuctionState,BidError> {
         match self.can_bid(&contract) {
-            Err(msg) => return Err(msg),
+            Err(err) => return Err(err),
             Ok(_) => (),
         }
 
-        self.stopped = contract.target == Target::ContractCapot;
+        if contract.target == Target::ContractCapot {
+            self.state = AuctionState::Coinching;
+        }
 
         self.history.push(contract);
         self.pass_count = 0;
 
         // Only stops the bids if the guy asked for a capot
-        Ok(self.stopped)
+        Ok(self.state)
     }
 
     pub fn current_contract(&self) -> Option<&Contract> {
@@ -128,7 +145,7 @@ impl Auction {
         &self.players
     }
 
-    pub fn pass(&mut self) -> bool {
+    pub fn pass(&mut self) -> AuctionState {
         self.pass_count += 1;
 
         // After 3 passes, we're back to the contract author, and we can start.
@@ -138,30 +155,37 @@ impl Auction {
             4
         };
 
-        self.stopped = self.pass_count == pass_limit;
+        if self.pass_count == pass_limit {
+            self.state = AuctionState::Over;
+        }
 
-        self.stopped
+        self.state
     }
 
-    pub fn coinche(&mut self) -> Result<bool,String> {
+    pub fn coinche(&mut self) -> Result<AuctionState,String> {
         if self.history.is_empty() {
             Err("no contract to coinche".to_string())
         } else {
-            self.stopped = true;
             let i = self.history.len() - 1;
             if self.history[i].coinche_level > 1 {
                 Err("constract is already sur-coinched".to_string())
             } else {
                 self.history[i].coinche_level += 1;
                 // Stop if we are already sur-coinching
-                Ok(self.history[i].coinche_level == 2)
+                self.state = if self.history[i].coinche_level == 2 {
+                    AuctionState::Over
+                } else {
+                    AuctionState::Coinching
+                };
+
+                Ok(self.state)
             }
         }
     }
 
     // Moves the auction to kill it
     pub fn complete(mut self) -> Result<game::GameState,String> {
-        if !self.stopped {
+        if self.state != AuctionState::Over {
             Err("auction is still running".to_string())
         } else if self.history.is_empty() {
             Err("no contract to start the game with".to_string())
@@ -175,12 +199,12 @@ impl Auction {
 fn test_auction() {
     let mut auction = new_auction(pos::PlayerPos(0));
 
-    assert!(!auction.stopped);
+    assert!(auction.state == AuctionState::Bidding);
 
     // First three people pass.
-    assert!(!auction.pass());
-    assert!(!auction.pass());
-    assert!(!auction.pass());
+    assert_eq!(auction.pass(), AuctionState::Bidding);
+    assert_eq!(auction.pass(), AuctionState::Bidding);
+    assert_eq!(auction.pass(), AuctionState::Bidding);
 
     // Someone bids.
     assert_eq!(auction.bid(Contract{
@@ -188,32 +212,32 @@ fn test_auction() {
         trump: cards::HEART,
         target: Target::Contract80,
         coinche_level: 0,
-    }), Ok(false));
+    }), Ok(AuctionState::Bidding));
     assert_eq!(auction.bid(Contract{
         author: pos::PlayerPos(0),
         trump: cards::CLUB,
         target: Target::Contract80,
         coinche_level: 0,
-    }).ok(), None);
+    }).err(), Some(BidError::NonRaisedTarget));
     assert_eq!(auction.bid(Contract{
         author: pos::PlayerPos(1),
         trump: cards::CLUB,
         target: Target::Contract100,
         coinche_level: 0,
-    }).ok(), None);
-    assert!(!auction.pass());
+    }).err(), Some(BidError::TurnError));
+    assert_eq!(auction.pass(), AuctionState::Bidding);
     // Partner surbids
     assert_eq!(auction.bid(Contract{
         author: pos::PlayerPos(1),
         trump: cards::HEART,
         target: Target::Contract100,
         coinche_level: 0,
-    }), Ok(false));
-    assert!(!auction.pass());
-    assert!(!auction.pass());
-    assert!(auction.pass());
+    }), Ok(AuctionState::Bidding));
+    assert_eq!(auction.pass(), AuctionState::Bidding);
+    assert_eq!(auction.pass(), AuctionState::Bidding);
+    assert_eq!(auction.pass(), AuctionState::Over);
 
-    assert!(auction.stopped);
+    assert!(auction.state == AuctionState::Over);
 
     match auction.complete() {
         Err(_) => assert!(false),
