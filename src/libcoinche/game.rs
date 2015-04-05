@@ -46,6 +46,11 @@ pub enum PlayError {
 }
 
 impl GameState {
+
+    pub fn scores(&self) -> [i32; 2] {
+        self.scores
+    }
+
     pub fn play_card(&mut self, player: pos::PlayerPos, card: cards::Card)
                      -> Result<TrickResult,PlayError> {
         if self.current != player {

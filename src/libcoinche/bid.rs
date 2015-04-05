@@ -60,6 +60,7 @@ pub enum AuctionState {
     Bidding,
     Coinching,
     Over,
+    Cancelled,
 }
 
 pub struct Auction {
@@ -86,6 +87,9 @@ pub enum BidError {
     PreCoinchedContract,
     TurnError,
     NonRaisedTarget,
+    AuctionRunning,
+    NoContract,
+    OverCoinche,
 }
 
 impl Auction {
@@ -153,26 +157,26 @@ impl Auction {
         self.pass_count += 1;
 
         // After 3 passes, we're back to the contract author, and we can start.
-        let pass_limit = if !self.history.is_empty() {
-            3
+        if !self.history.is_empty() {
+            if self.pass_count >= 3 {
+                self.state = AuctionState::Over;
+            }
         } else {
-            4
+            if self.pass_count >= 4 {
+                self.state = AuctionState::Cancelled;
+            }
         };
-
-        if self.pass_count == pass_limit {
-            self.state = AuctionState::Over;
-        }
 
         self.state
     }
 
-    pub fn coinche(&mut self) -> Result<AuctionState,String> {
+    pub fn coinche(&mut self) -> Result<AuctionState,BidError> {
         if self.history.is_empty() {
-            Err("no contract to coinche".to_string())
+            Err(BidError::NoContract)
         } else {
             let i = self.history.len() - 1;
             if self.history[i].coinche_level > 1 {
-                Err("constract is already sur-coinched".to_string())
+                Err(BidError::OverCoinche)
             } else {
                 self.history[i].coinche_level += 1;
                 // Stop if we are already sur-coinching
@@ -188,11 +192,11 @@ impl Auction {
     }
 
     // Moves the auction to kill it
-    pub fn complete(mut self) -> Result<game::GameState,String> {
+    pub fn complete(mut self) -> Result<game::GameState,BidError> {
         if self.state != AuctionState::Over {
-            Err("auction is still running".to_string())
+            Err(BidError::AuctionRunning)
         } else if self.history.is_empty() {
-            Err("no contract to start the game with".to_string())
+            Err(BidError::NoContract)
         } else {
             Ok(game::new_game(self.first, self.players, self.history.pop().expect("contract history empty")))
         }

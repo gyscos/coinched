@@ -1,5 +1,8 @@
 //! Module that represents a game of coinche.
 
+pub use self::game::GameState;
+pub use self::bid::{AuctionState,new_auction};
+
 pub mod cards;
 pub mod bid;
 pub mod game;
