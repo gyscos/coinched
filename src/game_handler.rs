@@ -1,39 +1,12 @@
 //!
 
 use super::libcoinche;
+use super::{ActionResult,Connector};
 
-use std::sync::mpsc;
-
-pub enum Action {
-    Pass,
-    Play(libcoinche::cards::Card),
-    Bid(libcoinche::bid::Contract),
-}
-
-pub enum ActionResult {
-    Success,
-
-    // Trick over: contains the winner
-    TrickOver(libcoinche::pos::PlayerPos),
-
-    // Game over: contains scores
-    GameOver([i32;2]),
-}
-
-pub struct Order {
-    pub author: libcoinche::pos::PlayerPos,
-    pub action: Action
-}
-
-pub struct Connector {
-    input: mpsc::Receiver<Order>,
-    output: [mpsc::Sender<ActionResult>; 4],
-}
-
-pub fn handle_game(mut connector: Connector) {
-    match handle_bidding(&mut connector) {
+pub fn handle_game(connector: &mut Connector) {
+    match handle_bidding(connector) {
         // Play the game!
-        Ok(game) => handle_cardplay(&mut connector, game),
+        Ok(game) => handle_cardplay(connector, game),
         // Cancelled... try again.
         Err(_) => (),
     }
@@ -77,6 +50,7 @@ fn handle_cardplay(connector: &mut Connector, game: libcoinche::GameState) {
     // Send them scores now I guess?
     let scores = game.scores();
     for sender in connector.output.iter() {
-        sender.send(ActionResult::GameOver(scores));
+        // The receiver should always be present, right?
+        sender.send(ActionResult::GameOver(scores)).unwrap();
     }
 }
