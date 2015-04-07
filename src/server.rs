@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc,RwLock,mpsc};
+use std::sync::{Arc,RwLock,Mutex,mpsc};
 
 use super::libcoinche::{bid,cards,pos,game};
 
@@ -69,6 +69,8 @@ pub struct Order {
 
 pub struct Server {
     party_list: RwLock<PartyList>,
+
+    waiting_list: Mutex<Vec<mpsc::Sender<NewPartyInfo>>>,
 }
 
 pub enum Game {
@@ -82,6 +84,14 @@ pub struct Party {
     observers: Vec<mpsc::Sender<Event>>,
 }
 
+fn new_party(first: pos::PlayerPos) -> Party {
+    Party {
+        game: Game::Bidding(bid::new_auction(first)),
+        events: Vec::new(),
+        observers: Vec::new(),
+    }
+}
+
 pub struct PlayerInfo {
     pub party: Arc<RwLock<Party>>,
     pub pos: pos::PlayerPos,
@@ -91,15 +101,78 @@ pub struct PartyList {
     pub player_map: HashMap<u32,PlayerInfo>,
 }
 
+impl PartyList {
+    fn make_ids(&self) -> [u32; 4] {
+        // Expect self.player_map to be locked
+        [0,1,2,3]
+    }
+}
+
 enum WaitResult {
     Ready(Event),
     Waiting(mpsc::Receiver<Event>),
 }
 
+enum JoinResult {
+    Ready(NewPartyInfo),
+    Waiting(mpsc::Receiver<NewPartyInfo>),
+}
+
 impl Server {
     pub fn join(&self) -> Option<NewPartyInfo> {
+        match self.get_join_result() {
+            JoinResult::Ready(info) => Some(info),
+            JoinResult::Waiting(rx) => Some(rx.recv().unwrap()),
+        }
+    }
 
-        None
+    fn get_join_result(&self) -> JoinResult {
+        let mut waiters = self.waiting_list.lock().unwrap();
+        if waiters.len() >= 3 {
+            // It's a PARTEY!
+            let info = self.make_party([
+                                       waiters.pop().unwrap(),
+                                       waiters.pop().unwrap(),
+                                       waiters.pop().unwrap(),
+            ]);
+            return JoinResult::Ready(info);
+        } else {
+            let (tx,rx) = mpsc::channel();
+            waiters.push(tx);
+            return JoinResult::Waiting(rx);
+        }
+    }
+
+    fn make_party(&self, others: [mpsc::Sender<NewPartyInfo>; 3]) -> NewPartyInfo {
+        let mut list = self.party_list.write().unwrap();
+
+        // Generate 4 new IDS
+        let ids = list.make_ids();
+
+        let party = Arc::new(RwLock::new(new_party(pos::P0)));
+        // Kickstart it with a new game!
+
+        // Prepare the players info
+        for i in 0..4 {
+            list.player_map.insert(ids[i], PlayerInfo {
+                party: party.clone(),
+                pos: pos::PlayerPos(i),
+            });
+        }
+
+        // Tell everyone. They'll love it.
+        for i in 0..3 {
+            others[i].send(NewPartyInfo{
+                player_id: ids[i],
+                player_pos: pos::PlayerPos(i),
+            }).unwrap();
+        }
+
+        // Even you, weird 4th dude.
+        NewPartyInfo{
+            player_id: ids[3],
+            player_pos: pos::P3,
+        }
     }
 
     // Play a card in the current game
