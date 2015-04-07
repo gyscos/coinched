@@ -2,7 +2,7 @@ use super::game;
 use super::cards;
 use super::pos;
 
-#[derive(PartialEq)]
+#[derive(PartialEq,Clone,Copy)]
 pub enum Target {
     Contract80,
     Contract90,
@@ -48,6 +48,7 @@ impl Target {
     }
 }
 
+#[derive(Clone)]
 pub struct Contract {
     pub trump: cards::Suit,
     pub author: pos::PlayerPos,

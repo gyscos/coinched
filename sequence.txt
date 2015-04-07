@@ -1,0 +1,58 @@
+Simple overview of the protocol
+
+
+
+API:
+
+Event-based
+
+WAIT(PID,EVENTID)
+-> [sleep, then...] EVENT(EVENTID+1, ...)
+or
+-> READY
+
+Action and Wait have identical result
+
+-----
+
+Actions
+
+BID(contract)
+-> BIDDED(author,contract)
+
+COINCHE()
+-> COINCHED(author)
+
+PASS()
+-> PASSED(author)
+
+-> BID_OVER(author,contract)
+-> BID_CANCELLED()
+
+PLAY_CARD(card)
+-> CARD_PLAYED(author, card)
+-> TRICK_OVER(winner)
+
+-> NEW_GAME(cards)
+-> GAME_OVER(game_scores, winner, party_scores)
+
+-> PARTY_CANCELLED(reason)
+
+-----
+
+Query-based
+
+SEE_HAND
+-> HAND(cards)
+
+SEE_TRICK
+-> TRICK(card[4])
+
+SEE_CONTRACTS
+-> CONTRACTS(List...)
+
+SEE_LAST_TRICK
+-> LAST_TRICK(Trick)
+
+SEE_SCORES
+-> SCORES(party_scores)
