@@ -86,6 +86,9 @@ pub enum Game {
 
 pub struct Party {
     game: Game,
+
+    scores: [i32; 2],
+
     events: Vec<EventType>,
     observers: Vec<mpsc::Sender<Event>>,
 }
@@ -93,6 +96,7 @@ pub struct Party {
 fn new_party(first: pos::PlayerPos) -> Party {
     Party {
         game: Game::Bidding(bid::new_auction(first)),
+        scores: [0;2],
         events: Vec::new(),
         observers: Vec::new(),
     }
@@ -110,6 +114,47 @@ impl Party {
         }
         self.observers.clear();
         self.events.push(event);
+    }
+
+    fn play_card(&mut self, pos: pos::PlayerPos, card: cards::Card) -> Result<Event,ServerError> {
+        let result = match &mut self.game {
+            &mut Game::Bidding(_) => {
+                // Bad time for a card play!
+                return Err(ServerError::PlayInAuction);
+            },
+            &mut Game::Playing(ref mut game) => {
+                match game.play_card(pos, card) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        // Nothing to see here
+                        return Err(ServerError::Play(err));
+                    },
+                }
+            },
+        };
+        self.add_event(EventType::FromPlayer(pos, PlayerEvent::CardPlayed(card)));
+        match result {
+            game::TrickResult::Nothing => (),
+            game::TrickResult::TrickOver(winner, game_result) => {
+                self.add_event(EventType::TrickOver(winner));
+                match game_result {
+                    game::GameResult::Nothing => (),
+                    game::GameResult::GameOver(points, winners, scores) => {
+                        for i in 0..2 { self.scores[i] += scores[i]; }
+                        let total_scores = self.scores;
+                        self.add_event(EventType::GameOver(points, winners, total_scores));
+                        // Prepare next game?
+                    }
+                }
+            },
+        }
+
+        // Dummy event before handling the real case
+        Ok(Event{
+            event: EventType::BidCancelled,
+            id:0
+        })
+
     }
 }
 
@@ -232,35 +277,8 @@ impl Server {
         };
 
         let mut party = info.party.write().unwrap();
+        party.play_card(info.pos, card)
 
-        let result = match &mut party.game {
-            &mut Game::Bidding(_) => {
-                // Bad time for a card play!
-                return Err(ServerError::PlayInAuction);
-            },
-            &mut Game::Playing(ref mut game) => {
-                match game.play_card(info.pos, card) {
-                    Ok(result) => result,
-                    Err(err) => {
-                        // Nothing to see here
-                        return Err(ServerError::Play(err));
-                    },
-                }
-            },
-        };
-        party.add_event(EventType::FromPlayer(info.pos, PlayerEvent::CardPlayed(card)));
-        match result {
-            game::TrickResult::Nothing => (),
-            game::TrickResult::TrickOver(winner) => party.add_event(EventType::TrickOver(winner)),
-        }
-
-        // TODO: check for gameover?
-
-        // Dummy event before handling the real case
-        Ok(Event{
-            event: EventType::BidCancelled,
-            id:0
-        })
     }
 
     // TODO: add bidding and stuff?

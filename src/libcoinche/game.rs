@@ -31,9 +31,15 @@ pub fn new_game(first: pos::PlayerPos, hands: [cards::Hand; 4], contract: bid::C
 }
 
 #[derive(PartialEq,Debug)]
+pub enum GameResult {
+    Nothing,
+    GameOver([i32;2], pos::Team, [i32;2]),
+}
+
+#[derive(PartialEq,Debug)]
 pub enum TrickResult {
     Nothing,
-    TrickOver(pos::PlayerPos),
+    TrickOver(pos::PlayerPos,GameResult),
 }
 
 #[derive(PartialEq,Debug)]
@@ -47,10 +53,6 @@ pub enum PlayError {
 
 impl GameState {
 
-    pub fn scores(&self) -> [i32; 2] {
-        self.scores
-    }
-
     pub fn play_card(&mut self, player: pos::PlayerPos, card: cards::Card)
                      -> Result<TrickResult,PlayError> {
         if self.current != player {
@@ -62,24 +64,58 @@ impl GameState {
 
         // Play the card
         let trump = self.contract.trump;
-        let over = self.current_trick_mut().play_card(player, card, trump);
+        let trick_over = self.current_trick_mut().play_card(player, card, trump);
 
         // Is the trick over?
-        let result: TrickResult;
-        if over {
+        let result = if trick_over {
             let winner = self.current_trick().winner;
             let score = self.current_trick().score(trump);
             self.scores[winner.team().0] += score;
             self.tricks.push(trick::empty_trick(winner));
-            result = TrickResult::TrickOver(winner);
+            TrickResult::TrickOver(winner, self.get_game_result())
         } else {
-            result = TrickResult::Nothing;
-        }
+            TrickResult::Nothing
+        };
 
         // Next!
         self.current = self.current.next();
 
         Ok(result)
+    }
+
+    fn get_game_result(&self) -> GameResult {
+        if !self.is_over() {
+            return GameResult::Nothing;
+        }
+
+        let taking_team = self.contract.author.team();
+        let taking_score = self.scores[taking_team.0];
+
+        let capot = self.is_capot(taking_team);
+
+        let victory = self.contract.target.victory(taking_score, capot);
+
+        let winners = if victory { taking_team } else { taking_team.opponent() };
+
+        // TODO: Allow for variants in scoring. (See wikipedia article)
+        let mut final_scores = [0; 2];
+        if victory {
+            final_scores[winners.0] = self.contract.target.score();
+        } else {
+            final_scores[winners.0] = 160;
+        }
+
+        GameResult::GameOver(self.scores, winners, final_scores)
+    }
+
+    fn is_capot(&self, team: pos::Team) -> bool {
+        for trick in self.tricks.iter() {
+            if trick.winner.team() != team {
+                return false;
+            }
+        }
+
+        true
     }
 
     pub fn can_play(&self, p: pos::PlayerPos, card: cards::Card) -> Result<(),PlayError> {
@@ -120,6 +156,10 @@ impl GameState {
         }
 
         Ok(())
+    }
+
+    fn is_over(&self) -> bool {
+        self.tricks.len() == 8
     }
 
     fn current_trick(&self) -> &trick::Trick {

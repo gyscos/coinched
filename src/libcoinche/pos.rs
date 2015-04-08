@@ -1,5 +1,12 @@
-#[derive(PartialEq,Clone,Copy)]
+#[derive(PartialEq,Clone,Copy,Debug)]
 pub struct Team(pub usize);
+
+impl Team {
+    pub fn opponent(self) -> Team {
+        Team(1 - self.0)
+    }
+}
+
 #[derive(PartialEq,Clone,Copy,Debug)]
 pub struct PlayerPos(pub usize);
 
