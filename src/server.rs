@@ -1,3 +1,7 @@
+extern crate rand;
+
+use self::rand::{thread_rng,Rng};
+
 use std::collections::HashMap;
 use std::sync::{Arc,RwLock,Mutex,mpsc};
 
@@ -104,7 +108,30 @@ pub struct PartyList {
 impl PartyList {
     fn make_ids(&self) -> [u32; 4] {
         // Expect self.player_map to be locked
-        [0,1,2,3]
+        let mut result = [0;4];
+
+        for i in 0..4 {
+            loop {
+                let id = thread_rng().next_u32();
+                if self.player_map.contains_key(&id) {
+                    continue;
+                }
+                let mut ok = true;
+                for j in 0..i {
+                    if result[j] == id {
+                        ok = false;
+                        break;
+                    }
+                }
+                if !ok {
+                    continue;
+                }
+
+                result[i] = id;
+            }
+        }
+
+        result
     }
 }
 
