@@ -71,7 +71,12 @@ impl GameState {
             let winner = self.current_trick().winner;
             let score = self.current_trick().score(trump);
             self.scores[winner.team().0] += score;
-            self.tricks.push(trick::empty_trick(winner));
+            if self.tricks.len() == 8 {
+                // 10 de der
+                self.scores[winner.team().0] += 10;
+            } else {
+                self.tricks.push(trick::empty_trick(winner));
+            }
             TrickResult::TrickOver(winner, self.get_game_result())
         } else {
             TrickResult::Nothing
