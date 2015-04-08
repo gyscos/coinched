@@ -103,7 +103,7 @@ fn new_party(first: pos::PlayerPos) -> Party {
 }
 
 impl Party {
-    fn add_event(&mut self, event: EventType) {
+    fn add_event(&mut self, event: EventType) -> Event {
         let ev = Event{
             event: event.clone(),
             id: self.events.len(),
@@ -114,6 +114,8 @@ impl Party {
         }
         self.observers.clear();
         self.events.push(event);
+
+        ev
     }
 
     fn play_card(&mut self, pos: pos::PlayerPos, card: cards::Card) -> Result<Event,ServerError> {
@@ -132,7 +134,9 @@ impl Party {
                 }
             },
         };
-        self.add_event(EventType::FromPlayer(pos, PlayerEvent::CardPlayed(card)));
+        // This is the main event we want to send.
+        // TODO: Batch event dispatch, and send all those together.
+        let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::CardPlayed(card)));
         match result {
             game::TrickResult::Nothing => (),
             game::TrickResult::TrickOver(winner, game_result) => {
@@ -143,18 +147,14 @@ impl Party {
                         for i in 0..2 { self.scores[i] += scores[i]; }
                         let total_scores = self.scores;
                         self.add_event(EventType::GameOver(points, winners, total_scores));
-                        // Prepare next game?
+                        // TODO: Prepare next game?
+                        // Maybe keep it in the history?
                     }
                 }
             },
         }
 
-        // Dummy event before handling the real case
-        Ok(Event{
-            event: EventType::BidCancelled,
-            id:0
-        })
-
+        Ok(main_event)
     }
 }
 
