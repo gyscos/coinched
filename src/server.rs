@@ -9,6 +9,7 @@ use super::libcoinche::{bid,cards,pos,game};
 
 pub enum ServerError {
     BadPlayerId,
+    BadEventId,
     PlayInAuction,
     BidInGame,
     Bid(bid::BidError),
@@ -43,7 +44,7 @@ pub enum EventType {
     PartyCancelled(String),
 
     // A player did something!
-    PlayerEvent(pos::PlayerPos, PlayerEvent),
+    FromPlayer(pos::PlayerPos, PlayerEvent),
 
     // Bid over: contains the contract and the author
     BidOver(pos::PlayerPos, bid::Contract),
@@ -61,6 +62,7 @@ pub enum EventType {
     GameOver([i32;2], pos::Team, [i32;2]),
 }
 
+#[derive(Clone)]
 pub struct Event {
     pub event: EventType,
     pub id: usize,
@@ -93,6 +95,20 @@ fn new_party(first: pos::PlayerPos) -> Party {
         game: Game::Bidding(bid::new_auction(first)),
         events: Vec::new(),
         observers: Vec::new(),
+    }
+}
+
+impl Party {
+    fn add_event(&mut self, event: EventType) {
+        let ev = Event{
+            event: event.clone(),
+            id: self.events.len(),
+        };
+        for sender in self.observers.iter() {
+            sender.send(ev.clone()).unwrap();
+        }
+        self.observers.clear();
+        self.events.push(event);
     }
 }
 
@@ -216,23 +232,28 @@ impl Server {
 
         let mut party = info.party.write().unwrap();
 
-        match &mut party.game {
+        let result = match &mut party.game {
             &mut Game::Bidding(_) => {
                 // Bad time for a card play!
                 return Err(ServerError::PlayInAuction);
             },
             &mut Game::Playing(ref mut game) => {
                 match game.play_card(info.pos, card) {
-                    Ok(result) => {
-                        // Ok, propagate the event
-                    },
+                    Ok(result) => result,
                     Err(err) => {
                         // Nothing to see here
                         return Err(ServerError::Play(err));
                     },
                 }
             },
+        };
+        party.add_event(EventType::FromPlayer(info.pos, PlayerEvent::CardPlayed(card)));
+        match result {
+            game::TrickResult::Nothing => (),
+            game::TrickResult::TrickOver(winner) => party.add_event(EventType::TrickOver(winner)),
         }
+
+        // TODO: check for gameover?
 
         // Dummy event before handling the real case
         Ok(Event{
@@ -241,47 +262,47 @@ impl Server {
         })
     }
 
+    // TODO: add bidding and stuff?
+
 
     // Waits until the given event_id happens
     pub fn wait(&self, player_id: u32, event_id: usize) -> Result<Event,ServerError> {
         let res = self.get_wait_result(player_id, event_id);
 
-        let event = match res {
-            None => return Err(ServerError::BadPlayerId),
-            Some(WaitResult::Ready(event)) => event,
-            Some(WaitResult::Waiting(rx)) => rx.recv().unwrap(),
-        };
-
-        Ok(event)
+        match res {
+            Err(err) => Err(err),
+            Ok(WaitResult::Ready(event)) => Ok(event),
+            // TODO: handle case where the wait is cancelled
+            // (don't unwrap, return an error instead?)
+            Ok(WaitResult::Waiting(rx)) => Ok(rx.recv().unwrap()),
+        }
     }
 
     // Check if the event ID is already available. If not, returns a channel that will produce it one
     // day, so that we don't keep the locks while waiting.
-    fn get_wait_result(&self, player_id: u32, event_id: usize) -> Option<WaitResult> {
+    fn get_wait_result(&self, player_id: u32, event_id: usize) -> Result<WaitResult,ServerError> {
         let list = self.party_list.read().unwrap();
         if !list.player_map.contains_key(&player_id) {
-            return None;
+            return Err(ServerError::BadPlayerId);
         }
 
         let info = list.player_map.get(&player_id).unwrap();
         let mut party = info.party.write().unwrap();
 
         if party.events.len() > event_id {
-            return Some(WaitResult::Ready(Event {
+            return Ok(WaitResult::Ready(Event {
                 event: party.events[event_id].clone(),
                 id: event_id,
             }));
         } else if event_id > party.events.len() {
             // We are too ambitious! One event at a time!
-            return None;
+            return Err(ServerError::BadEventId);
         }
 
         let (tx, rx) = mpsc::channel();
         party.observers.push(tx);
 
-        Some(WaitResult::Waiting(rx))
+        Ok(WaitResult::Waiting(rx))
     }
-
-
 }
 
