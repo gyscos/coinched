@@ -105,6 +105,7 @@ impl Party {
             id: self.events.len(),
         };
         for sender in self.observers.iter() {
+            // TODO: handle cancelled wait?
             sender.send(ev.clone()).unwrap();
         }
         self.observers.clear();
@@ -164,6 +165,8 @@ enum JoinResult {
 impl Server {
     pub fn join(&self) -> Option<NewPartyInfo> {
         match self.get_join_result() {
+            // TODO: add a timeout (max: 20s)
+            // TODO: handle cancelled join?
             JoinResult::Ready(info) => Some(info),
             JoinResult::Waiting(rx) => Some(rx.recv().unwrap()),
         }
@@ -204,6 +207,7 @@ impl Server {
         }
 
         // Tell everyone. They'll love it.
+        // TODO: handle cancelled channels (?)
         for i in 0..3 {
             others[i].send(NewPartyInfo{
                 player_id: ids[i],
@@ -265,6 +269,8 @@ impl Server {
     // Waits until the given event_id happens
     pub fn wait(&self, player_id: u32, event_id: usize) -> Result<Event,ServerError> {
         let res = self.get_wait_result(player_id, event_id);
+
+        // TODO: add a timeout (~15s?)
 
         match res {
             Err(err) => Err(err),
