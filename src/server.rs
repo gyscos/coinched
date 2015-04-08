@@ -222,13 +222,10 @@ impl Server {
     pub fn play_card(&self, player_id: u32, card: cards::Card) -> Result<Event,ServerError> {
         let list = self.party_list.read().unwrap();
 
-        if !list.player_map.contains_key(&player_id) {
-            // Bad player id!
-
-            return Err(ServerError::BadPlayerId);
-        }
-
-        let info = list.player_map.get(&player_id).unwrap();
+        let info = match list.player_map.get(&player_id) {
+            Some(info) => info,
+            None => return Err(ServerError::BadPlayerId),
+        };
 
         let mut party = info.party.write().unwrap();
 
@@ -282,11 +279,12 @@ impl Server {
     // day, so that we don't keep the locks while waiting.
     fn get_wait_result(&self, player_id: u32, event_id: usize) -> Result<WaitResult,ServerError> {
         let list = self.party_list.read().unwrap();
-        if !list.player_map.contains_key(&player_id) {
-            return Err(ServerError::BadPlayerId);
-        }
 
-        let info = list.player_map.get(&player_id).unwrap();
+        let info = match list.player_map.get(&player_id) {
+            Some(info) => info,
+            None => return Err(ServerError::BadPlayerId),
+        };
+
         let mut party = info.party.write().unwrap();
 
         if party.events.len() > event_id {
