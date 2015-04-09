@@ -4,6 +4,7 @@ use super::pos;
 use super::cards;
 use super::points;
 
+#[derive(Clone)]
 pub struct Trick {
     pub cards: [cards::Card; 4],
     pub first: pos::PlayerPos,

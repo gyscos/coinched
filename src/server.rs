@@ -5,13 +5,15 @@ use self::rand::{thread_rng,Rng};
 use std::collections::HashMap;
 use std::sync::{Arc,RwLock,Mutex,mpsc};
 
-use super::libcoinche::{bid,cards,pos,game};
+use super::libcoinche::{bid,cards,pos,game,trick};
 
 pub enum ServerError {
     BadPlayerId,
     BadEventId,
+
     PlayInAuction,
     BidInGame,
+
     Bid(bid::BidError),
     Play(game::PlayError),
 }
@@ -411,7 +413,6 @@ impl Server {
         party.coinche(info.pos)
     }
 
-    // TODO: add getter methods: get_hand, ...
     pub fn see_hand(&self, player_id: u32) -> Result<cards::Hand, ServerError> {
         let list = self.party_list.read().unwrap();
 
@@ -427,6 +428,39 @@ impl Server {
         };
 
         Ok(hands[info.pos.0])
+    }
+
+    pub fn see_trick(&self, player_id: u32) -> Result<trick::Trick,ServerError> {
+        let list = self.party_list.read().unwrap();
+
+        let info = match list.player_map.get(&player_id) {
+            Some(info) => info,
+            None => return Err(ServerError::BadPlayerId),
+        };
+
+        let party = info.party.read().unwrap();
+        match party.game {
+            Game::Bidding(_) => Err(ServerError::PlayInAuction),
+            Game::Playing(ref game) => Ok(game.current_trick().clone()),
+        }
+    }
+
+    pub fn see_last_trick(&self, player_id: u32) -> Result<trick::Trick, ServerError> {
+        let list = self.party_list.read().unwrap();
+
+        let info = match list.player_map.get(&player_id) {
+            Some(info) => info,
+            None => return Err(ServerError::BadPlayerId),
+        };
+
+        let party = info.party.read().unwrap();
+        match party.game {
+            Game::Bidding(_) => Err(ServerError::PlayInAuction),
+            Game::Playing(ref game) => match game.last_trick() {
+                Ok(trick) => Ok(trick.clone()),
+                Err(err) => Err(ServerError::Play(err)),
+            }
+        }
     }
 
     // Waits until the given event_id happens

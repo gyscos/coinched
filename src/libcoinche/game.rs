@@ -49,6 +49,8 @@ pub enum PlayError {
     IncorrectSuit,
     InvalidPiss,
     NonRaisedTrump,
+
+    NoLastTrick,
 }
 
 impl GameState {
@@ -175,7 +177,16 @@ impl GameState {
         self.tricks.len() == 8
     }
 
-    fn current_trick(&self) -> &trick::Trick {
+    pub fn last_trick(&self) -> Result<&trick::Trick,PlayError> {
+        if self.tricks.len() == 1 {
+            Err(PlayError::NoLastTrick)
+        } else {
+            let i = self.tricks.len()-2;
+            Ok(&self.tricks[i])
+        }
+    }
+
+    pub fn current_trick(&self) -> &trick::Trick {
         let i = self.tricks.len()-1;
         &self.tricks[i]
     }
