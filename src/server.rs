@@ -144,6 +144,10 @@ impl Party {
         self.add_event(event);
     }
 
+    fn cancel(&mut self) {
+        self.add_event(EventType::PartyCancelled("player left".to_string()));
+    }
+
     fn bid(&mut self, pos: pos::PlayerPos, contract: bid::Contract) -> Result<Event,ServerError> {
         let state = match &mut self.game {
             &mut Game::Bidding(ref mut auction) => {
@@ -290,6 +294,11 @@ impl PartyList {
         }
 
         result
+    }
+
+    fn remove(&mut self, player_id: u32) {
+        self.player_map.get(&player_id).unwrap().party.write().unwrap().cancel();
+        self.player_map.remove(&player_id);
     }
 }
 
@@ -482,6 +491,13 @@ impl Server {
             Some(info) => Ok(info.pos),
             None => Err(ServerError::BadPlayerId),
         }
+    }
+
+    // TODO: auto-leave players after long inactivity
+    pub fn leave(&self, player_id: u32) {
+        let mut list = self.party_list.write().unwrap();
+
+        list.remove(player_id);
     }
 
     // Waits until the given event_id happens
