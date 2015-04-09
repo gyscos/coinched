@@ -193,7 +193,7 @@ impl Auction {
     }
 
     // Moves the auction to kill it
-    pub fn complete(mut self) -> Result<game::GameState,BidError> {
+    pub fn complete(&mut self) -> Result<game::GameState,BidError> {
         if self.state != AuctionState::Over {
             Err(BidError::AuctionRunning)
         } else if self.history.is_empty() {

@@ -53,6 +53,10 @@ pub enum PlayError {
 
 impl GameState {
 
+    pub fn contract(&self) -> &bid::Contract {
+        &self.contract
+    }
+
     pub fn play_card(&mut self, player: pos::PlayerPos, card: cards::Card)
                      -> Result<TrickResult,PlayError> {
         if self.current != player {

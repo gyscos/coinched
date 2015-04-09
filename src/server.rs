@@ -47,7 +47,7 @@ pub enum EventType {
     FromPlayer(pos::PlayerPos, PlayerEvent),
 
     // Bid over: contains the contract and the author
-    BidOver(pos::PlayerPos, bid::Contract),
+    BidOver(bid::Contract),
     // The bid was cancelled, probably because no one bidded anything.
     // A new game is probably on its way.
     BidCancelled,
@@ -140,15 +140,57 @@ impl Party {
         self.add_event(event);
     }
 
+    fn bid(&mut self, pos: pos::PlayerPos, contract: bid::Contract) -> Result<Event,ServerError> {
+        let state = match &mut self.game {
+            &mut Game::Bidding(ref mut auction) => {
+                match auction.bid(contract.clone()) {
+                    Ok(state) => state,
+                    Err(err) => return Err(ServerError::Bid(err)),
+                }
+
+            },
+            &mut Game::Playing(_) => return Err(ServerError::BidInGame),
+        };
+
+        let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::Bidded(contract.clone())));
+        match state {
+            bid::AuctionState::Over => {
+                // Now we're playing!
+                match self.complete_auction() {
+                    Some(err) => return Err(ServerError::Bid(err)),
+                    None => (),
+                }
+            },
+            _ => (),
+        }
+
+        Ok(main_event)
+    }
+
+    fn complete_auction(&mut self) -> Option<bid::BidError> {
+        let game = match &mut self.game {
+            &mut Game::Playing(_) => unreachable!(),
+            &mut Game::Bidding(ref mut auction) => {
+                match auction.complete() {
+                    Ok(game) => game,
+                    Err(err) => return Some(err),
+                }
+            }
+        };
+
+        self.add_event(EventType::BidOver(game.contract().clone()));
+
+        self.game = Game::Playing(game);
+
+        None
+    }
+
     fn play_card(&mut self, pos: pos::PlayerPos, card: cards::Card) -> Result<Event,ServerError> {
         let result = match &mut self.game {
             &mut Game::Playing(ref mut game) => {
                 match game.play_card(pos, card) {
                     Ok(result) => result,
-                    Err(err) => {
-                        // Nothing to see here
-                        return Err(ServerError::Play(err));
-                    },
+                    Err(err) => return Err(ServerError::Play(err)),
                 }
             },
             &mut Game::Bidding(_) => {
@@ -303,6 +345,17 @@ impl Server {
     }
 
     // TODO: add bidding and stuff?
+    pub fn bid(&self, player_id: u32, contract: bid::Contract) -> Result<Event,ServerError> {
+        let list = self.party_list.read().unwrap();
+
+        let info = match list.player_map.get(&player_id) {
+            Some(info) => info,
+            None => return Err(ServerError::BadPlayerId),
+        };
+
+        let mut party = info.party.write().unwrap();
+        party.bid(info.pos, contract)
+    }
 
 
     // Waits until the given event_id happens
