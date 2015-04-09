@@ -356,7 +356,6 @@ impl Server {
 
     }
 
-    // TODO: add bidding and stuff?
     pub fn bid(&self, player_id: u32, contract: bid::Contract) -> Result<Event,ServerError> {
         let list = self.party_list.read().unwrap();
 
@@ -381,6 +380,9 @@ impl Server {
         party.pass(info.pos)
     }
 
+    // TODO: add coinche()
+
+    // TODO: add getter methods: get_hand, ...
 
     // Waits until the given event_id happens
     pub fn wait(&self, player_id: u32, event_id: usize) -> Result<Event,ServerError> {
