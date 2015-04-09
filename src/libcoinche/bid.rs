@@ -150,8 +150,8 @@ impl Auction {
         }
     }
 
-    pub fn hands(&self) -> &[cards::Hand; 4] {
-        &self.players
+    pub fn hands(&self) -> [cards::Hand; 4] {
+        self.players
     }
 
     pub fn pass(&mut self) -> AuctionState {

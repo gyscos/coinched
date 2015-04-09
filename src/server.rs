@@ -84,8 +84,18 @@ pub enum Game {
     Playing(game::GameState),
 }
 
+fn make_game(first: pos::PlayerPos) -> (bid::Auction, EventType) {
+    let auction = bid::new_auction(first);
+    let hands = auction.hands();
+
+    let event = EventType::NewGame(first, hands);
+
+    (auction,event)
+}
+
 pub struct Party {
     game: Game,
+    first: pos::PlayerPos,
 
     scores: [i32; 2],
 
@@ -94,10 +104,12 @@ pub struct Party {
 }
 
 fn new_party(first: pos::PlayerPos) -> Party {
+    let (auction,event) = make_game(first);
     Party {
-        game: Game::Bidding(bid::new_auction(first)),
+        first: first,
+        game: Game::Bidding(auction),
         scores: [0;2],
-        events: Vec::new(),
+        events: vec![event],
         observers: Vec::new(),
     }
 }
@@ -118,12 +130,18 @@ impl Party {
         ev
     }
 
+    fn new_game(&mut self) {
+        // TODO: Maybe keep the current game in the history?
+
+        let (auction, event) = make_game(self.first);
+
+        self.first = self.first.next();
+        self.game = Game::Bidding(auction);
+        self.add_event(event);
+    }
+
     fn play_card(&mut self, pos: pos::PlayerPos, card: cards::Card) -> Result<Event,ServerError> {
         let result = match &mut self.game {
-            &mut Game::Bidding(_) => {
-                // Bad time for a card play!
-                return Err(ServerError::PlayInAuction);
-            },
             &mut Game::Playing(ref mut game) => {
                 match game.play_card(pos, card) {
                     Ok(result) => result,
@@ -132,6 +150,10 @@ impl Party {
                         return Err(ServerError::Play(err));
                     },
                 }
+            },
+            &mut Game::Bidding(_) => {
+                // Bad time for a card play!
+                return Err(ServerError::PlayInAuction);
             },
         };
         // This is the main event we want to send.
@@ -147,8 +169,7 @@ impl Party {
                         for i in 0..2 { self.scores[i] += scores[i]; }
                         let total_scores = self.scores;
                         self.add_event(EventType::GameOver(points, winners, total_scores));
-                        // TODO: Prepare next game?
-                        // Maybe keep it in the history?
+                        self.new_game();
                     }
                 }
             },
