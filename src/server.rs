@@ -101,7 +101,7 @@ pub struct Party {
     scores: [i32; 2],
 
     events: Vec<EventType>,
-    observers: Vec<mpsc::Sender<Event>>,
+    observers: Mutex<Vec<mpsc::Sender<Event>>>,
 }
 
 fn new_party(first: pos::PlayerPos) -> Party {
@@ -111,7 +111,7 @@ fn new_party(first: pos::PlayerPos) -> Party {
         game: Game::Bidding(auction),
         scores: [0;2],
         events: vec![event],
-        observers: Vec::new(),
+        observers: Mutex::new(Vec::new()),
     }
 }
 
@@ -121,11 +121,12 @@ impl Party {
             event: event.clone(),
             id: self.events.len(),
         };
-        for sender in self.observers.iter() {
+        let mut observers = self.observers.lock().unwrap();
+        for sender in observers.iter() {
             // TODO: handle cancelled wait?
             sender.send(ev.clone()).unwrap();
         }
-        self.observers.clear();
+        observers.clear();
         self.events.push(event);
 
         ev
@@ -411,6 +412,22 @@ impl Server {
     }
 
     // TODO: add getter methods: get_hand, ...
+    pub fn see_hand(&self, player_id: u32) -> Result<cards::Hand, ServerError> {
+        let list = self.party_list.read().unwrap();
+
+        let info = match list.player_map.get(&player_id) {
+            Some(info) => info,
+            None => return Err(ServerError::BadPlayerId),
+        };
+
+        let party = info.party.read().unwrap();
+        let hands = match party.game {
+            Game::Bidding(ref auction) => auction.hands(),
+            Game::Playing(ref game) => game.hands(),
+        };
+
+        Ok(hands[info.pos.0])
+    }
 
     // Waits until the given event_id happens
     pub fn wait(&self, player_id: u32, event_id: usize) -> Result<Event,ServerError> {
@@ -437,7 +454,7 @@ impl Server {
             None => return Err(ServerError::BadPlayerId),
         };
 
-        let mut party = info.party.write().unwrap();
+        let party = info.party.read().unwrap();
 
         if party.events.len() > event_id {
             return Ok(WaitResult::Ready(Event {
@@ -449,8 +466,10 @@ impl Server {
             return Err(ServerError::BadEventId);
         }
 
+        // Ok, so we'll have to wait a bit.
+
         let (tx, rx) = mpsc::channel();
-        party.observers.push(tx);
+        party.observers.lock().unwrap().push(tx);
 
         Ok(WaitResult::Waiting(rx))
     }

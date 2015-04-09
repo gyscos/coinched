@@ -127,6 +127,10 @@ impl GameState {
         true
     }
 
+    pub fn hands(&self) -> [cards::Hand; 4] {
+        self.players
+    }
+
     pub fn can_play(&self, p: pos::PlayerPos, card: cards::Card) -> Result<(),PlayError> {
         let hand = self.players[p.0];
 
