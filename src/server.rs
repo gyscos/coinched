@@ -181,6 +181,24 @@ impl Party {
         Ok(main_event)
     }
 
+    fn coinche(&mut self, pos: pos::PlayerPos) -> Result<Event, ServerError> {
+        let state = match &mut self.game {
+            &mut Game::Bidding(ref mut auction) => match auction.coinche() {
+                Ok(state) => state,
+                Err(err) => return Err(ServerError::Bid(err)),
+            },
+            &mut Game::Playing(_) => return Err(ServerError::BidInGame),
+        };
+
+        let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::Coinched));
+        match state {
+            bid::AuctionState::Over => self.complete_auction(),
+            _ => (),
+        }
+
+        Ok(main_event)
+    }
+
     fn complete_auction(&mut self) {
         let game = match &mut self.game {
             &mut Game::Playing(_) => unreachable!(),
@@ -380,7 +398,17 @@ impl Server {
         party.pass(info.pos)
     }
 
-    // TODO: add coinche()
+    pub fn coinche(&self, player_id: u32) -> Result<Event, ServerError> {
+        let list = self.party_list.read().unwrap();
+
+        let info = match list.player_map.get(&player_id) {
+            Some(info) => info,
+            None => return Err(ServerError::BadPlayerId),
+        };
+
+        let mut party = info.party.write().unwrap();
+        party.coinche(info.pos)
+    }
 
     // TODO: add getter methods: get_hand, ...
 
