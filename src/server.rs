@@ -475,6 +475,15 @@ impl Server {
         Ok(party.scores)
     }
 
+    pub fn see_pos(&self, player_id: u32) -> Result<pos::PlayerPos,ServerError> {
+        let list = self.party_list.read().unwrap();
+
+        match list.player_map.get(&player_id) {
+            Some(info) => Ok(info.pos),
+            None => Err(ServerError::BadPlayerId),
+        }
+    }
+
     // Waits until the given event_id happens
     pub fn wait(&self, player_id: u32, event_id: usize) -> Result<Event,ServerError> {
         let res = self.get_wait_result(player_id, event_id);
