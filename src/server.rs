@@ -62,7 +62,6 @@ pub enum EventType {
 
     // Game over: contains scores
     GameOver([i32;2], pos::Team, [i32;2]),
-    GameCancelled,
 }
 
 #[derive(Clone)]
@@ -179,7 +178,7 @@ impl Party {
         match state {
             bid::AuctionState::Over => self.complete_auction(),
             bid::AuctionState::Cancelled => {
-                self.add_event(EventType::GameCancelled);
+                self.add_event(EventType::BidCancelled);
                 self.new_game();
             },
             _ => (),
