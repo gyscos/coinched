@@ -1,6 +1,5 @@
-extern crate rand;
-
-use self::rand::{thread_rng,Rng};
+use rand::{thread_rng,Rng};
+use time;
 
 use std::collections::HashMap;
 use std::sync::{Arc,RwLock,Mutex,mpsc};
@@ -260,6 +259,7 @@ impl Party {
 pub struct PlayerInfo {
     pub party: Arc<RwLock<Party>>,
     pub pos: pos::PlayerPos,
+    pub last_time: Mutex<time::Tm>,
 }
 
 pub struct PartyList {
@@ -352,6 +352,7 @@ impl Server {
             list.player_map.insert(ids[i], PlayerInfo {
                 party: party.clone(),
                 pos: pos::PlayerPos(i),
+                last_time: Mutex::new(time::now()),
             });
         }
 
