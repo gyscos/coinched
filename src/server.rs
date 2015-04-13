@@ -87,7 +87,7 @@ pub struct Order {
 }
 
 pub struct Server {
-    party_list: RwLock<PartyList>,
+    party_list: RwLock<PlayerList>,
 
     waiting_list: Mutex<Vec<mpsc::Sender<NewPartyInfo>>>,
 }
@@ -276,15 +276,19 @@ pub struct PlayerInfo {
     pub last_time: Mutex<time::Tm>,
 }
 
-pub struct PartyList {
+pub struct PlayerList {
     pub player_map: HashMap<u32,PlayerInfo>,
 }
 
-impl PartyList {
+impl PlayerList {
     fn get_player_info(&self, player_id: u32) -> Result<&PlayerInfo,ServerError> {
         match self.player_map.get(&player_id) {
             None => Err(ServerError::BadPlayerId),
-            Some(info) => Ok(info),
+            Some(info) => {
+                // Update the last active time
+                *info.last_time.lock().unwrap() = time::now();
+                Ok(info)
+            },
         }
     }
 
