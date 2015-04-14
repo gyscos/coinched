@@ -1,5 +1,6 @@
 pub mod libcoinche;
-pub mod server;
+pub mod game_manager;
+pub mod http;
 
 extern crate rand;
 extern crate time;

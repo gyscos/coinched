@@ -1,5 +1,17 @@
-use hyper::Server;
+use hyper;
+use super::game_manager::GameManager;
 
 pub struct HttpServer {
-    server: server::Server,
+    manager: GameManager,
+}
+
+impl HttpServer {
+    pub fn new() -> HttpServer {
+        HttpServer {
+            manager: GameManager::new(),
+        }
+    }
+
+    pub fn run(&mut self) {
+    }
 }
