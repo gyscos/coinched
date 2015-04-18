@@ -9,3 +9,4 @@ time = "*"
 
 [dependencies.hyper]
 git = "https://github.com/hyperium/hyper.git"
+features = ["nightly"]

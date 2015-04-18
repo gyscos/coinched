@@ -1,5 +1,7 @@
 extern crate coinched;
 
 fn main() {
-    println!("Hello, world!");
+    let server = coinched::http::Server::new(3000);
+
+    server.run();
 }
