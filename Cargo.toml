@@ -7,6 +7,8 @@ authors = ["Alexandre Bury <alexandre.bury@gmail.com>"]
 rand = "0.3.7"
 time = "*"
 
-[dependencies.hyper]
-git = "https://github.com/hyperium/hyper.git"
-features = ["nightly"]
+[dependencies.iron]
+verion = "*"
+
+[dependencies.bodyparser]
+git = "https://github.com/iron/body-parser.git"
