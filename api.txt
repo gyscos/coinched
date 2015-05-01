@@ -1,0 +1,27 @@
+GET:
+/wait/[PID]/[EID]
+/see/hand/[PID]
+/see/trick/[PID]
+/see/contracts/[PID]
+/see/last_trick/[PID]
+/see/scores/[PID]
+
+POST:
+/bid/[PID]
+/pass/[PID]
+/coinche/[PID]
+/play/[PID]
+
+/join
+
+
+Parameters:
+contract: (Suit,Contract_type)
+card: (Suit,Rank)
+
+SUIT:D,H,S,C
+Rank:7,8,9,X,J,Q,K,A
+Contract:80,90,1X0,ALL
+
+{"card":"8H"}
+{"contract":"80","suit":"S"}
