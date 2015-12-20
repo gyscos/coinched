@@ -1,16 +1,19 @@
+PID=Player UUID
+EID=Event ID
+
 GET:
 /wait/[PID]/[EID]
-/see/hand/[PID]
-/see/trick/[PID]
-/see/contracts/[PID]
-/see/last_trick/[PID]
-/see/scores/[PID]
+/hand/[PID]
+/trick/[PID]
+/contracts/[PID]
+/last_trick/[PID]
+/scores/[PID]
 
 POST:
-/bid/[PID]
 /pass/[PID]
 /coinche/[PID]
-/play/[PID]
+/bid/[PID] + contract
+/play/[PID] + card
 
 /join
 
@@ -25,3 +28,14 @@ Contract:80,90,1X0,ALL
 
 {"card":"8H"}
 {"contract":"80","suit":"S"}
+
+Desired properties:
+
+* Calling twice the same page should not cause error
+* Ideally, calling twice the same web page should return the same thing
+
+Player refinement:
+
+* Anonymous players, UUID generated on /join
+* Named player, name is chosen on /join, no registration
+* Registrated players, use password?

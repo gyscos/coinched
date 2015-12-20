@@ -1,14 +1,11 @@
 [package]
+authors = ["Alexandre Bury <alexandre.bury@gmail.com>"]
 name = "coinched"
 version = "0.0.1"
-authors = ["Alexandre Bury <alexandre.bury@gmail.com>"]
 
 [dependencies]
-rand = "0.3.7"
-time = "*"
-
-[dependencies.iron]
-verion = "*"
-
-[dependencies.bodyparser]
-git = "https://github.com/iron/body-parser.git"
+bodyparser = "0.0.6"
+iron = "0.2.6"
+rand = "0.3.12"
+rustc-serialize = "0.3.16"
+time = "0.1.34"
