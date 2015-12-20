@@ -86,14 +86,21 @@ pub struct Order {
     pub action: Action
 }
 
+/// Base class for managing matchmaking.
+///
+/// It is the main entry point for the API.
+/// It offers a thread-safe access to various actions.
 pub struct GameManager {
     party_list: RwLock<PlayerList>,
 
     waiting_list: Mutex<Vec<mpsc::Sender<NewPartyInfo>>>,
 }
 
+/// Describe a single game.
 pub enum Game {
+    /// The game is still in the auction phase
     Bidding(bid::Auction),
+    /// The game is in the main playing phase
     Playing(game::GameState),
 }
 
@@ -305,7 +312,9 @@ impl PlayerList {
         for i in 0..4 {
             loop {
                 let id = thread_rng().next_u32();
+                // println!("New UUID: {}", id);
                 if self.player_map.contains_key(&id) {
+                    // println!("Damnation!");
                     continue;
                 }
                 let mut ok = true;
@@ -315,11 +324,10 @@ impl PlayerList {
                         break;
                     }
                 }
-                if !ok {
-                    continue;
+                if ok {
+                    result[i] = id;
+                    break;
                 }
-
-                result[i] = id;
             }
         }
 
@@ -361,6 +369,7 @@ impl GameManager {
 
     fn get_join_result(&self) -> JoinResult {
         let mut waiters = self.waiting_list.lock().unwrap();
+        // println!("Waiters: {}", waiters.len());
         if waiters.len() >= 3 {
             // It's a PARTEY!
             let info = self.make_party([
@@ -368,6 +377,7 @@ impl GameManager {
                                        waiters.pop().unwrap(),
                                        waiters.pop().unwrap(),
             ]);
+            // println!("PARTEY INCOMING");
             return JoinResult::Ready(info);
         } else {
             let (tx,rx) = mpsc::channel();
@@ -379,8 +389,12 @@ impl GameManager {
     fn make_party(&self, others: [mpsc::Sender<NewPartyInfo>; 3]) -> NewPartyInfo {
         let mut list = self.party_list.write().unwrap();
 
+        // println!("Making a party now!");
+
         // Generate 4 new IDS
         let ids = list.make_ids();
+
+        // println!("IDS: {:?}", ids);
 
         let party = Arc::new(RwLock::new(new_party(pos::P0)));
         // Kickstart it with a new game!
@@ -396,12 +410,15 @@ impl GameManager {
 
         // Tell everyone. They'll love it.
         // TODO: handle cancelled channels (?)
+        // println!("Waking them up!");
         for i in 0..3 {
             others[i].send(NewPartyInfo{
                 player_id: ids[i],
                 player_pos: pos::PlayerPos(i),
             }).unwrap();
         }
+
+        // println!("Almost ready!");
 
         // Even you, weird 4th dude.
         NewPartyInfo{
