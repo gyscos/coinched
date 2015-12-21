@@ -4,6 +4,7 @@ extern crate rand;
 
 use self::rand::{thread_rng,Rng};
 use std::num::Wrapping;
+use rustc_serialize;
 
 #[derive(PartialEq,Clone,Copy)]
 pub struct Suit(pub u32);
@@ -11,6 +12,19 @@ pub const HEART: Suit = Suit(1 << 0);
 pub const SPADE: Suit = Suit(1 << 8);
 pub const DIAMOND: Suit = Suit(1 << 16);
 pub const CLUB: Suit = Suit(1 << 24);
+
+
+impl rustc_serialize::Encodable for Suit {
+    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+        s.emit_str(match self {
+            &HEART => "heart",
+            &SPADE => "spade",
+            &DIAMOND => "diamond",
+            &CLUB => "club",
+            _ => "??",
+        })
+    }
+}
 
 pub fn get_suit(n: u32) -> Suit {
     Suit(1 << 8*n)

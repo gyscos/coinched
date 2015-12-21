@@ -1,3 +1,5 @@
+use rustc_serialize;
+
 #[derive(PartialEq,Clone,Copy,Debug)]
 pub struct Team(pub usize);
 
@@ -9,6 +11,12 @@ impl Team {
 
 #[derive(PartialEq,Clone,Copy,Debug)]
 pub struct PlayerPos(pub usize);
+
+impl rustc_serialize::Encodable for PlayerPos {
+    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+        self.0.encode(s)
+    }
+}
 
 pub struct PlayerIterator {
     current: PlayerPos,

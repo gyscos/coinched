@@ -1,6 +1,7 @@
 use super::game_manager::GameManager;
 
 use std::sync::Arc;
+use std::str::FromStr;
 
 use rustc_serialize::json;
 
@@ -47,11 +48,25 @@ fn help_message() -> String {
 }
 
 
-fn help() -> IronResult<Response> {
+fn help_resp() -> IronResult<Response> {
     let content_type: iron::mime::Mime = "application/json".parse::<iron::mime::Mime>().unwrap();
     return Ok(Response::with((content_type,
                               iron::status::NotFound,
                               help_message())));
+}
+
+fn err_resp(msg: &str) -> IronResult<Response> {
+    let content_type: iron::mime::Mime = "application/json".parse::<iron::mime::Mime>().unwrap();
+
+    #[derive(RustcEncodable)]
+    struct Error<'a>{
+        error: &'a str,
+    }
+
+    return Ok(Response::with((content_type,
+                              iron::status::Ok,
+                              json::encode(&Error { error: msg }).unwrap(),
+                              )));
 }
 
 impl iron::Handler for Router {
@@ -85,17 +100,34 @@ impl iron::Handler for Router {
                                                    iron::method::Options])),
                                        iron::status::Ok)))
                 } else {
-                    help()
+                    help_resp()
                 }
             },
             iron::method::Get => {
                 let response = match action {
-                    "hand" => "",
-                    "trick" => "",
-                    "contracts" => "",
-                    "last_trick" => "",
-                    "scores" => "",
-                    _ => return help(),
+                    "wait" => {
+                        if req.url.path.len() != 3 {
+                            return err_resp("missing parameters (Usage: /wait/[PID]/[EID])");
+                        }
+                        let player_id = match u32::from_str(&*req.url.path[1]) {
+                            Ok(id) => id,
+                            Err(e) => return err_resp(&format!("Invalid playerID: `{}` ({})", req.url.path[1], e)),
+                        };
+                        let event_id = match usize::from_str(&*req.url.path[2]) {
+                            Ok(id) => id,
+                            Err(e) => return err_resp(&format!("Invalid eventID: `{}` ({})", req.url.path[2], e)),
+                        };
+                        match self.manager.wait(player_id, event_id) {
+                            Err(err) => return err_resp(&format!("{}", err)),
+                            Ok(event) => json::encode(&event).unwrap(),
+                        }
+                    },
+                    "hand" => "".to_string(),
+                    "trick" => "".to_string(),
+                    "contracts" => "".to_string(),
+                    "last_trick" => "".to_string(),
+                    "scores" => "".to_string(),
+                    _ => return help_resp(),
                 };
 
                 Ok(Response::with((content_type, iron::status::Ok, response)))
@@ -107,26 +139,15 @@ impl iron::Handler for Router {
 
                 let response = match action {
                     "join" => match self.manager.join() {
-                        None => "error".to_string(),
-                        Some(info) => {
-                            #[derive(RustcEncodable)]
-                            struct NewPartyInfo {
-                                id: u32,
-                                pos: usize,
-                            }
-
-                            json::encode(&NewPartyInfo {
-                                id: info.player_id,
-                                pos: info.player_pos.0,
-                            }).unwrap()
-                        },
+                        Err(msg) => return err_resp(&msg),
+                        Ok(info) => json::encode(&info).unwrap(),
                     },
-                    _ => return help(),
+                    _ => return help_resp(),
                 };
 
                 Ok(Response::with((content_type, iron::status::Ok, response)))
             },
-            _ => help(),
+            _ => help_resp(),
         }
     }
 }

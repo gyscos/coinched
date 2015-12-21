@@ -1,11 +1,14 @@
 use rand::{thread_rng,Rng};
 use time;
 
+use std::fmt;
 use std::collections::HashMap;
 use std::sync::{Arc,RwLock,Mutex,mpsc};
 use std::convert::From;
 
 use super::libcoinche::{bid,cards,pos,game,trick};
+
+use rustc_serialize;
 
 pub enum ManagerError {
     BadPlayerId,
@@ -16,6 +19,19 @@ pub enum ManagerError {
 
     Bid(bid::BidError),
     Play(game::PlayError),
+}
+
+impl fmt::Display for ManagerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &ManagerError::BadPlayerId => write!(f, "bad Player ID"),
+            &ManagerError::BadEventId  => write!(f, "bad Event ID"),
+            &ManagerError::PlayInAuction => write!(f, "cannot play during auction"),
+            &ManagerError::BidInGame => write!(f, "cannot bid during card play"),
+            &ManagerError::Bid(ref error) => write!(f, "{}", error),
+            &ManagerError::Play(ref error) => write!(f, "{}", error),
+        }
+    }
 }
 
 impl From<bid::BidError> for ManagerError {
@@ -45,6 +61,7 @@ pub enum PlayerEvent {
 }
 
 // Player just joined a new party. He's given a player id, and his position.
+#[derive(RustcEncodable)]
 pub struct NewPartyInfo {
     pub player_id: u32,
     pub player_pos: pos::PlayerPos,
@@ -75,7 +92,35 @@ pub enum EventType {
     GameOver([i32;2], pos::Team, [i32;2]),
 }
 
-#[derive(Clone)]
+// Ugly serialization...
+impl rustc_serialize::Encodable for EventType {
+    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+        match self {
+            &EventType::PartyCancelled(ref msg) => {
+                s.emit_struct("Event", 2, |s| {
+                    try!(s.emit_struct_field("type", 0, |s| "PartyCancelled".encode(s)));
+                    try!(s.emit_struct_field("msg", 1, |s| msg.encode(s)));
+                    Ok(())
+                })
+            },
+            &EventType::BidCancelled => {
+                s.emit_struct("Event", 1, |s| {
+                    s.emit_struct_field("type", 0, |s| "BidCancelled".encode(s))
+                })
+            },
+            &EventType::BidOver(ref contract) => {
+                s.emit_struct("Event", 2, |s| {
+                    try!(s.emit_struct_field("type", 0, |s| "BidOver".encode(s)));
+                    try!(s.emit_struct_field("contract", 1, |s| contract.encode(s)));
+                    Ok(())
+                })
+            },
+            _ => Ok(())
+        }
+    }
+}
+
+#[derive(Clone,RustcEncodable)]
 pub struct Event {
     pub event: EventType,
     pub id: usize,
@@ -358,12 +403,13 @@ impl GameManager {
         }
     }
 
-    pub fn join(&self) -> Option<NewPartyInfo> {
+    /// Attempts to join a new party. Blocks until a party is available.
+    pub fn join(&self) -> Result<NewPartyInfo, String> {
         match self.get_join_result() {
             // TODO: add a timeout (max: 20s)
             // TODO: handle cancelled join?
-            JoinResult::Ready(info) => Some(info),
-            JoinResult::Waiting(rx) => Some(rx.recv().unwrap()),
+            JoinResult::Ready(info) => Ok(info),
+            JoinResult::Waiting(rx) => Ok(rx.recv().unwrap()),
         }
     }
 

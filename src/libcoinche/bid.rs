@@ -1,6 +1,10 @@
+use std::fmt;
+
 use super::game;
 use super::cards;
 use super::pos;
+
+use rustc_serialize;
 
 #[derive(PartialEq,Clone,Copy)]
 pub enum Target {
@@ -15,6 +19,24 @@ pub enum Target {
     Contract160,
     ContractCapot,
 }
+
+impl rustc_serialize::Encodable for Target {
+    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+        s.emit_str(match self {
+            &Target::Contract80 => "80",
+            &Target::Contract90 => "90",
+            &Target::Contract100 => "100",
+            &Target::Contract110 => "110",
+            &Target::Contract120 => "120",
+            &Target::Contract130 => "130",
+            &Target::Contract140 => "140",
+            &Target::Contract150 => "150",
+            &Target::Contract160 => "160",
+            &Target::ContractCapot => "Capot",
+        })
+    }
+}
+
 
 impl Target {
     pub fn score(&self) -> i32 {
@@ -48,7 +70,7 @@ impl Target {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,RustcEncodable)]
 pub struct Contract {
     pub trump: cards::Suit,
     pub author: pos::PlayerPos,
@@ -91,6 +113,20 @@ pub enum BidError {
     AuctionRunning,
     NoContract,
     OverCoinche,
+}
+
+impl fmt::Display for BidError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &BidError::AuctionClosed => write!(f, "auctions are closed"),
+            &BidError::PreCoinchedContract => write!(f, "cannot bid a coinched contract"),
+            &BidError::TurnError => write!(f, "invalid turn order"),
+            &BidError::NonRaisedTarget => write!(f, "bid must be higher than current contract"),
+            &BidError::AuctionRunning => write!(f, "the auction are still running"),
+            &BidError::NoContract => write!(f, "no contract was offered"),
+            &BidError::OverCoinche => write!(f, "contract is already sur-coinched"),
+        }
+    }
 }
 
 impl Auction {

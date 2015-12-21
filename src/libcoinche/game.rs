@@ -1,4 +1,5 @@
 //! Module for the card game, after auctions are complete.
+use std::fmt;
 
 use super::pos;
 use super::cards;
@@ -51,6 +52,19 @@ pub enum PlayError {
     NonRaisedTrump,
 
     NoLastTrick,
+}
+
+impl fmt::Display for PlayError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &PlayError::TurnError => write!(f, "invalid turn order"),
+            &PlayError::CardMissing => write!(f, "you can only play cards you have"),
+            &PlayError::IncorrectSuit => write!(f, "wrong suit played"),
+            &PlayError::InvalidPiss => write!(f, "you must use trumps"),
+            &PlayError::NonRaisedTrump => write!(f, "too weak trump played"),
+            &PlayError::NoLastTrick => write!(f, "no trick has been played yet"),
+        }
+    }
 }
 
 impl GameState {
