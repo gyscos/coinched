@@ -41,6 +41,11 @@ fn help_message() -> String {
                 help: "Join a new game.",
             },
             HelpAction {
+                href: "/leave/[PLAYER_ID]",
+                method: "POST",
+                help: "Leave the current game.",
+            },
+            HelpAction {
                 href: "/pass/[PLAYER_ID]",
                 method: "POST",
                 help: "Pass during auction.",
@@ -197,14 +202,14 @@ impl iron::Handler for Router {
         match req.method {
             iron::method::Options => {
                 let action = &*req.url.path[0];
-                if ["hand", "trick", "contracts", "last_trick", "scores"].contains(&action) {
+                if ["hand", "trick", "last_trick", "scores", "pos"].contains(&action) {
                     Ok(Response::with((iron::modifiers::Header(
                                            iron::headers::Allow(
                                                vec![
                                                    iron::method::Get,
                                                    iron::method::Options])),
                                        iron::status::Ok)))
-                } else if ["pass", "coinche", "bid", "play", "join"].contains(&action) {
+                } else if ["pass", "coinche", "bid", "play", "join", "leave"].contains(&action) {
                     Ok(Response::with((iron::modifiers::Header(
                                            iron::headers::Allow(
                                                vec![
@@ -262,6 +267,12 @@ impl iron::Handler for Router {
                     "join" => {
                         check_len!(req.url.path, 1);
                         try_manager!(self.manager.join())
+                    },
+                    "leave" => {
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        self.manager.pass(player_id);
+                        r#""ok""#.to_string()
                     },
                     "pass" => {
                         check_len!(req.url.path, 2);
