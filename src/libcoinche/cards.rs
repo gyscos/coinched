@@ -79,6 +79,14 @@ impl Rank {
 #[derive(PartialEq,Clone,Copy)]
 pub struct Card(pub u32);
 
+impl rustc_serialize::Encodable for Card {
+    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+        self.0.encode(s)
+    }
+}
+
+
+
 impl Card {
     pub fn id(self) -> u32 {
         let mut i = 0;
@@ -152,6 +160,12 @@ fn card_test() {
 
 #[derive(PartialEq,Clone,Copy)]
 pub struct Hand(pub u32);
+
+impl rustc_serialize::Encodable for Hand {
+    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+        self.0.encode(s)
+    }
+}
 
 pub fn new_hand() -> Hand {
     Hand(0)

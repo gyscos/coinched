@@ -3,6 +3,12 @@ use rustc_serialize;
 #[derive(PartialEq,Clone,Copy,Debug)]
 pub struct Team(pub usize);
 
+impl rustc_serialize::Encodable for Team {
+    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+        self.0.encode(s)
+    }
+}
+
 impl Team {
     pub fn opponent(self) -> Team {
         Team(1 - self.0)

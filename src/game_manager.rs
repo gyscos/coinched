@@ -3,12 +3,13 @@ use time;
 
 use std::fmt;
 use std::collections::HashMap;
-use std::sync::{Arc,RwLock,Mutex,mpsc};
+use std::sync::{Arc,RwLock,Mutex};
 use std::convert::From;
 
 use super::libcoinche::{bid,cards,pos,game,trick};
 
 use rustc_serialize;
+use eventual::{Future,Complete,Async};
 
 pub enum ManagerError {
     BadPlayerId,
@@ -24,8 +25,8 @@ pub enum ManagerError {
 impl fmt::Display for ManagerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ManagerError::BadPlayerId => write!(f, "bad Player ID"),
-            &ManagerError::BadEventId  => write!(f, "bad Event ID"),
+            &ManagerError::BadPlayerId => write!(f, "player not found"),
+            &ManagerError::BadEventId  => write!(f, "event not found"),
             &ManagerError::PlayInAuction => write!(f, "cannot play during auction"),
             &ManagerError::BidInGame => write!(f, "cannot bid during card play"),
             &ManagerError::Bid(ref error) => write!(f, "{}", error),
@@ -60,6 +61,29 @@ pub enum PlayerEvent {
     CardPlayed(cards::Card),
 }
 
+impl rustc_serialize::Encodable for PlayerEvent {
+    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+        match self {
+            &PlayerEvent::Bidded(ref contract) => s.emit_struct("PlayerEvent", 2, |s| {
+                try!(s.emit_struct_field("type", 0, |s| "Bidded".encode(s)));
+                try!(s.emit_struct_field("contract", 1, |s| contract.encode(s)));
+                Ok(())
+            }),
+            &PlayerEvent::Coinched => s.emit_struct("PlayerEvent", 1, |s| {
+                s.emit_struct_field("type", 0, |s| "Coinched".encode(s))
+            }),
+            &PlayerEvent::Passed => s.emit_struct("PlayerEvent", 1, |s| {
+                s.emit_struct_field("type", 0, |s| "Passed".encode(s))
+            }),
+            &PlayerEvent::CardPlayed(card) => s.emit_struct("PlayerEvent", 2, |s| {
+                try!(s.emit_struct_field("type", 0, |s| "CardPlayed".encode(s)));
+                try!(s.emit_struct_field("card", 1, |s| card.encode(s)));
+                Ok(())
+            }),
+        }
+    }
+}
+
 // Player just joined a new party. He's given a player id, and his position.
 #[derive(RustcEncodable)]
 pub struct NewPartyInfo {
@@ -83,39 +107,74 @@ pub enum EventType {
     BidCancelled,
 
     // Trick over: contains the winner
-    TrickOver(pos::PlayerPos),
+    TrickOver { winner: pos::PlayerPos },
 
     // New game: contains the first player, and the player's hand
-    NewGame(pos::PlayerPos, [cards::Hand;4]),
+    NewGame { first: pos::PlayerPos, hands: [cards::Hand;4] },
+    NewGameRelative { first: pos::PlayerPos, hand: cards::Hand },
 
     // Game over: contains scores
-    GameOver([i32;2], pos::Team, [i32;2]),
+    GameOver { points: [i32;2], winner: pos::Team, scores: [i32;2] },
+}
+
+impl EventType {
+    pub fn relativize(&self, from: pos::PlayerPos) -> Self {
+        match self {
+            &EventType::NewGame { first, hands } =>
+                EventType::NewGameRelative { first: first, hand: hands[from.0] },
+            _ => self.clone(),
+        }
+    }
 }
 
 // Ugly serialization...
 impl rustc_serialize::Encodable for EventType {
     fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
         match self {
-            &EventType::PartyCancelled(ref msg) => {
-                s.emit_struct("Event", 2, |s| {
-                    try!(s.emit_struct_field("type", 0, |s| "PartyCancelled".encode(s)));
-                    try!(s.emit_struct_field("msg", 1, |s| msg.encode(s)));
-                    Ok(())
-                })
-            },
-            &EventType::BidCancelled => {
-                s.emit_struct("Event", 1, |s| {
-                    s.emit_struct_field("type", 0, |s| "BidCancelled".encode(s))
-                })
-            },
-            &EventType::BidOver(ref contract) => {
-                s.emit_struct("Event", 2, |s| {
-                    try!(s.emit_struct_field("type", 0, |s| "BidOver".encode(s)));
-                    try!(s.emit_struct_field("contract", 1, |s| contract.encode(s)));
-                    Ok(())
-                })
-            },
-            _ => Ok(())
+            &EventType::PartyCancelled(ref msg) => s.emit_struct("Event", 2, |s| {
+                try!(s.emit_struct_field("type", 0, |s| "PartyCancelled".encode(s)));
+                try!(s.emit_struct_field("msg", 1, |s| msg.encode(s)));
+                Ok(())
+            }),
+            &EventType::BidCancelled => s.emit_struct("Event", 1, |s| {
+                s.emit_struct_field("type", 0, |s| "BidCancelled".encode(s))
+            }),
+            &EventType::BidOver(ref contract) => s.emit_struct("Event", 2, |s| {
+                try!(s.emit_struct_field("type", 0, |s| "BidOver".encode(s)));
+                try!(s.emit_struct_field("contract", 1, |s| contract.encode(s)));
+                Ok(())
+            }),
+            &EventType::TrickOver { winner: pos } => s.emit_struct("Event", 2, |s| {
+                try!(s.emit_struct_field("type", 0, |s| "TrickOver".encode(s)));
+                try!(s.emit_struct_field("pos", 1, |s| pos.encode(s)));
+                Ok(())
+            }),
+            &EventType::FromPlayer(pos, ref event) => s.emit_struct("Event", 3, |s| {
+                try!(s.emit_struct_field("type", 0, |s| "FromPlayer".encode(s)));
+                try!(s.emit_struct_field("pos", 1, |s| pos.encode(s)));
+                try!(s.emit_struct_field("event", 2, |s| event.encode(s)));
+                Ok(())
+            }),
+            &EventType::NewGame { first, ref hands } => s.emit_struct("Event", 3, |s| {
+                // Should rarely happen
+                try!(s.emit_struct_field("type", 0, |s| "NewGameGlobal".encode(s)));
+                try!(s.emit_struct_field("first", 1, |s| first.encode(s)));
+                try!(s.emit_struct_field("hands", 2, |s| hands.encode(s)));
+                Ok(())
+            }),
+            &EventType::NewGameRelative { first, ref hand } => s.emit_struct("Event", 3, |s| {
+                try!(s.emit_struct_field("type", 0, |s| "NewGame".encode(s)));
+                try!(s.emit_struct_field("first", 1, |s| first.encode(s)));
+                try!(s.emit_struct_field("cards", 2, |s| hand.encode(s)));
+                Ok(())
+            }),
+            &EventType::GameOver { points, winner, scores } => s.emit_struct("Event", 4, |s| {
+                try!(s.emit_struct_field("type", 0, |s| "GameOver".encode(s)));
+                try!(s.emit_struct_field("points", 1, |s| points.encode(s)));
+                try!(s.emit_struct_field("winner", 2, |s| winner.encode(s)));
+                try!(s.emit_struct_field("scores", 3, |s| scores.encode(s)));
+                Ok(())
+            }),
         }
     }
 }
@@ -138,7 +197,7 @@ pub struct Order {
 pub struct GameManager {
     party_list: RwLock<PlayerList>,
 
-    waiting_list: Mutex<Vec<mpsc::Sender<NewPartyInfo>>>,
+    waiting_list: Mutex<Vec<Complete<NewPartyInfo,()>>>,
 }
 
 /// Describe a single game.
@@ -153,7 +212,7 @@ fn make_game(first: pos::PlayerPos) -> (bid::Auction, EventType) {
     let auction = bid::new_auction(first);
     let hands = auction.hands();
 
-    let event = EventType::NewGame(first, hands);
+    let event = EventType::NewGame { first: first, hands: hands };
 
     (auction,event)
 }
@@ -165,7 +224,7 @@ pub struct Party {
     scores: [i32; 2],
 
     events: Vec<EventType>,
-    observers: Mutex<Vec<mpsc::Sender<Event>>>,
+    observers: Mutex<Vec<Complete<Event,()>>>,
 }
 
 fn new_party(first: pos::PlayerPos) -> Party {
@@ -186,11 +245,10 @@ impl Party {
             id: self.events.len(),
         };
         let mut observers = self.observers.lock().unwrap();
-        for sender in observers.iter() {
+        for promise in observers.drain(..) {
             // TODO: handle cancelled wait?
-            sender.send(ev.clone()).unwrap();
+            promise.complete(ev.clone());
         }
-        observers.clear();
         self.events.push(event);
 
         ev
@@ -305,13 +363,16 @@ impl Party {
         match result {
             game::TrickResult::Nothing => (),
             game::TrickResult::TrickOver(winner, game_result) => {
-                self.add_event(EventType::TrickOver(winner));
+                self.add_event(EventType::TrickOver{ winner: winner });
                 match game_result {
                     game::GameResult::Nothing => (),
                     game::GameResult::GameOver(points, winners, scores) => {
                         for i in 0..2 { self.scores[i] += scores[i]; }
-                        let total_scores = self.scores;
-                        self.add_event(EventType::GameOver(points, winners, total_scores));
+                        self.add_event(EventType::GameOver {
+                            points: points,
+                            winner: winners,
+                            scores: scores,
+                        });
                         self.next_game();
                     }
                 }
@@ -387,12 +448,12 @@ impl PlayerList {
 
 enum WaitResult {
     Ready(Event),
-    Waiting(mpsc::Receiver<Event>),
+    Waiting(Future<Event,()>),
 }
 
 enum JoinResult {
     Ready(NewPartyInfo),
-    Waiting(mpsc::Receiver<NewPartyInfo>),
+    Waiting(Future<NewPartyInfo,()>),
 }
 
 impl GameManager {
@@ -409,7 +470,7 @@ impl GameManager {
             // TODO: add a timeout (max: 20s)
             // TODO: handle cancelled join?
             JoinResult::Ready(info) => Ok(info),
-            JoinResult::Waiting(rx) => Ok(rx.recv().unwrap()),
+            JoinResult::Waiting(future) => Ok(future.await().unwrap()),
         }
     }
 
@@ -418,21 +479,21 @@ impl GameManager {
         // println!("Waiters: {}", waiters.len());
         if waiters.len() >= 3 {
             // It's a PARTEY!
-            let info = self.make_party([
-                                       waiters.pop().unwrap(),
-                                       waiters.pop().unwrap(),
-                                       waiters.pop().unwrap(),
+            let info = self.make_party(vec![
+               waiters.pop().unwrap(),
+               waiters.pop().unwrap(),
+               waiters.pop().unwrap(),
             ]);
             // println!("PARTEY INCOMING");
             return JoinResult::Ready(info);
         } else {
-            let (tx,rx) = mpsc::channel();
-            waiters.push(tx);
-            return JoinResult::Waiting(rx);
+            let (promise,future) = Future::pair();
+            waiters.push(promise);
+            return JoinResult::Waiting(future);
         }
     }
 
-    fn make_party(&self, others: [mpsc::Sender<NewPartyInfo>; 3]) -> NewPartyInfo {
+    fn make_party(&self, others: Vec<Complete<NewPartyInfo,()>>) -> NewPartyInfo {
         let mut list = self.party_list.write().unwrap();
 
         // println!("Making a party now!");
@@ -457,11 +518,11 @@ impl GameManager {
         // Tell everyone. They'll love it.
         // TODO: handle cancelled channels (?)
         // println!("Waking them up!");
-        for i in 0..3 {
-            others[i].send(NewPartyInfo{
+        for (i,promise) in others.into_iter().enumerate() {
+            promise.complete(NewPartyInfo {
                 player_id: ids[i],
                 player_pos: pos::PlayerPos(i),
-            }).unwrap();
+            });
         }
 
         // println!("Almost ready!");
@@ -571,7 +632,7 @@ impl GameManager {
             WaitResult::Ready(event) => Ok(event),
             // TODO: handle case where the wait is cancelled
             // (don't unwrap, return an error instead?)
-            WaitResult::Waiting(rx) => Ok(rx.recv().unwrap()),
+            WaitResult::Waiting(future) => Ok(future.await().unwrap()),
         }
     }
 
@@ -585,7 +646,7 @@ impl GameManager {
 
         if party.events.len() > event_id {
             return Ok(WaitResult::Ready(Event {
-                event: party.events[event_id].clone(),
+                event: party.events[event_id].relativize(info.pos),
                 id: event_id,
             }));
         } else if event_id > party.events.len() {
@@ -595,10 +656,10 @@ impl GameManager {
 
         // Ok, so we'll have to wait a bit.
 
-        let (tx, rx) = mpsc::channel();
-        party.observers.lock().unwrap().push(tx);
+        let (promise, future) = Future::pair();
+        party.observers.lock().unwrap().push(promise);
 
-        Ok(WaitResult::Waiting(rx))
+        Ok(WaitResult::Waiting(future))
     }
 }
 

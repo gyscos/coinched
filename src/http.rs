@@ -35,13 +35,18 @@ fn help_message() -> String {
         actions: vec![
             HelpAction {
                 href: "/join",
-                method: "GET",
+                method: "POST",
                 help: "Join a new game.",
             },
             HelpAction {
                 href: "/hand/[PLAYER_ID]",
                 method: "GET",
                 help: "Checks the current hand.",
+            },
+            HelpAction {
+                href: "/wait/[PLAYER_ID]/[EVENT_ID]",
+                method: "GET",
+                help: "Wait until the next event, or return it if it already happened.",
             },
         ]
     }).unwrap()
@@ -111,11 +116,11 @@ impl iron::Handler for Router {
                         }
                         let player_id = match u32::from_str(&*req.url.path[1]) {
                             Ok(id) => id,
-                            Err(e) => return err_resp(&format!("Invalid playerID: `{}` ({})", req.url.path[1], e)),
+                            Err(e) => return err_resp(&format!("invalid player ID: `{}` ({})", req.url.path[1], e)),
                         };
                         let event_id = match usize::from_str(&*req.url.path[2]) {
                             Ok(id) => id,
-                            Err(e) => return err_resp(&format!("Invalid eventID: `{}` ({})", req.url.path[2], e)),
+                            Err(e) => return err_resp(&format!("invalid event ID: `{}` ({})", req.url.path[2], e)),
                         };
                         match self.manager.wait(player_id, event_id) {
                             Err(err) => return err_resp(&format!("{}", err)),

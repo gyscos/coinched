@@ -5,6 +5,7 @@ version = "0.0.1"
 
 [dependencies]
 bodyparser = "0.0.6"
+eventual = "0.1.4"
 iron = "0.2.6"
 rand = "0.3.12"
 rustc-serialize = "0.3.16"
