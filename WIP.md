@@ -1,12 +1,11 @@
 Currently working on:
 
-* HTTP server
-  * Event serialization
+* Rust CLI UI
+  * Deserialization for messages
 
 TODO:
 
 * Debug admin console for backend
-* CLI UI
 * HTML5 UI
 * Wait event range
 * Canceled JOIN requests in API

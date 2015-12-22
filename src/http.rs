@@ -271,7 +271,7 @@ impl iron::Handler for Router {
                     "leave" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
-                        self.manager.pass(player_id);
+                        self.manager.leave(player_id);
                         r#""ok""#.to_string()
                     },
                     "pass" => {
