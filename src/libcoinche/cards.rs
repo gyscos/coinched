@@ -16,13 +16,10 @@ pub const CLUB: Suit = Suit(1 << 24);
 
 impl rustc_serialize::Encodable for Suit {
     fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        s.emit_str(match self {
-            &HEART => "heart",
-            &SPADE => "spade",
-            &DIAMOND => "diamond",
-            &CLUB => "club",
-            _ => "??",
-        })
+        match *self {
+            HEART | SPADE | DIAMOND | CLUB => self.0.encode(s),
+            _ => "??".encode(s),
+        }
     }
 }
 
@@ -84,7 +81,6 @@ impl rustc_serialize::Encodable for Card {
         self.0.encode(s)
     }
 }
-
 
 
 impl Card {

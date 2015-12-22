@@ -11,6 +11,8 @@ use super::libcoinche::{bid,cards,pos,game,trick};
 use rustc_serialize;
 use eventual::{Future,Complete,Async};
 
+pub type ManagerResult <T> = Result<T, ManagerError>;
+
 pub enum ManagerError {
     BadPlayerId,
     BadEventId,
@@ -254,21 +256,21 @@ impl Party {
         ev
     }
 
-    fn get_auction_mut(&mut self) -> Result<&mut bid::Auction,ManagerError> {
+    fn get_auction_mut(&mut self) -> ManagerResult<&mut bid::Auction> {
         match self.game {
             Game::Bidding(ref mut auction) => Ok(auction),
             Game::Playing(_) => Err(ManagerError::BidInGame),
         }
     }
 
-    fn get_game(&self) -> Result<&game::GameState,ManagerError> {
+    fn get_game(&self) -> ManagerResult<&game::GameState> {
         match self.game {
             Game::Bidding(_) => Err(ManagerError::PlayInAuction),
             Game::Playing(ref game) => Ok(game),
         }
     }
 
-    fn get_game_mut(&mut self) -> Result<&mut game::GameState,ManagerError> {
+    fn get_game_mut(&mut self) -> ManagerResult<&mut game::GameState> {
         match self.game {
             Game::Bidding(_) => Err(ManagerError::PlayInAuction),
             Game::Playing(ref mut game) => Ok(game),
@@ -289,7 +291,7 @@ impl Party {
         self.add_event(EventType::PartyCancelled("player left".to_string()));
     }
 
-    fn bid(&mut self, pos: pos::PlayerPos, contract: bid::Contract) -> Result<Event,ManagerError> {
+    fn bid(&mut self, pos: pos::PlayerPos, contract: bid::Contract) -> ManagerResult<Event> {
         let state = {
             let auction = try!(self.get_auction_mut());
             try!(auction.bid(contract.clone()))
@@ -465,7 +467,7 @@ impl GameManager {
     }
 
     /// Attempts to join a new party. Blocks until a party is available.
-    pub fn join(&self) -> Result<NewPartyInfo, String> {
+    pub fn join(&self) -> ManagerResult<NewPartyInfo> {
         match self.get_join_result() {
             // TODO: add a timeout (max: 20s)
             // TODO: handle cancelled join?
@@ -535,7 +537,7 @@ impl GameManager {
     }
 
     // Play a card in the current game
-    pub fn play_card(&self, player_id: u32, card: cards::Card) -> Result<Event,ManagerError> {
+    pub fn play_card(&self, player_id: u32, card: cards::Card) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -545,7 +547,7 @@ impl GameManager {
 
     }
 
-    pub fn bid(&self, player_id: u32, contract: bid::Contract) -> Result<Event,ManagerError> {
+    pub fn bid(&self, player_id: u32, contract: bid::Contract) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -553,7 +555,7 @@ impl GameManager {
         party.bid(info.pos, contract)
     }
 
-    pub fn pass(&self, player_id: u32) -> Result<Event, ManagerError> {
+    pub fn pass(&self, player_id: u32) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -561,7 +563,7 @@ impl GameManager {
         party.pass(info.pos)
     }
 
-    pub fn coinche(&self, player_id: u32) -> Result<Event, ManagerError> {
+    pub fn coinche(&self, player_id: u32) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -569,7 +571,7 @@ impl GameManager {
         party.coinche(info.pos)
     }
 
-    pub fn see_hand(&self, player_id: u32) -> Result<cards::Hand, ManagerError> {
+    pub fn see_hand(&self, player_id: u32) -> ManagerResult<cards::Hand> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -582,7 +584,7 @@ impl GameManager {
         Ok(hands[info.pos.0])
     }
 
-    pub fn see_trick(&self, player_id: u32) -> Result<trick::Trick,ManagerError> {
+    pub fn see_trick(&self, player_id: u32) -> ManagerResult<trick::Trick> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -591,7 +593,7 @@ impl GameManager {
         Ok(game.current_trick().clone())
     }
 
-    pub fn see_last_trick(&self, player_id: u32) -> Result<trick::Trick, ManagerError> {
+    pub fn see_last_trick(&self, player_id: u32) -> ManagerResult<trick::Trick> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -601,7 +603,7 @@ impl GameManager {
         Ok(trick.clone())
     }
 
-    pub fn see_scores(&self, player_id: u32) -> Result<[i32;2],ManagerError> {
+    pub fn see_scores(&self, player_id: u32) -> ManagerResult<[i32;2]> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -609,7 +611,7 @@ impl GameManager {
         Ok(party.scores)
     }
 
-    pub fn see_pos(&self, player_id: u32) -> Result<pos::PlayerPos,ManagerError> {
+    pub fn see_pos(&self, player_id: u32) -> ManagerResult<pos::PlayerPos> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
         Ok(info.pos)
@@ -623,7 +625,7 @@ impl GameManager {
     }
 
     // Waits until the given event_id happens
-    pub fn wait(&self, player_id: u32, event_id: usize) -> Result<Event,ManagerError> {
+    pub fn wait(&self, player_id: u32, event_id: usize) -> ManagerResult<Event> {
         let res = try!(self.get_wait_result(player_id, event_id));
 
         // TODO: add a timeout (~15s?)
@@ -638,7 +640,7 @@ impl GameManager {
 
     // Check if the event ID is already available. If not, returns a channel that will produce it one
     // day, so that we don't keep the locks while waiting.
-    fn get_wait_result(&self, player_id: u32, event_id: usize) -> Result<WaitResult,ManagerError> {
+    fn get_wait_result(&self, player_id: u32, event_id: usize) -> ManagerResult<WaitResult> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
