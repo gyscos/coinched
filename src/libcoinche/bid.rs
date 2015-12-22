@@ -1,4 +1,5 @@
 use std::fmt;
+use std::str::FromStr;
 
 use super::game;
 use super::cards;
@@ -66,6 +67,26 @@ impl Target {
             Target::Contract150 => score >= 150,
             Target::Contract160 => score >= 160,
             Target::ContractCapot => capot,
+        }
+    }
+}
+
+impl FromStr for Target {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "80" => Ok(Target::Contract80),
+            "90" => Ok(Target::Contract90),
+            "100" => Ok(Target::Contract100),
+            "110" => Ok(Target::Contract110),
+            "120" => Ok(Target::Contract120),
+            "130" => Ok(Target::Contract130),
+            "140" => Ok(Target::Contract140),
+            "150" => Ok(Target::Contract150),
+            "160" => Ok(Target::Contract160),
+            "Capot" => Ok(Target::ContractCapot),
+            _ => Err(format!("invalid target: {}", s)),
         }
     }
 }

@@ -23,11 +23,12 @@ impl rustc_serialize::Encodable for Suit {
     }
 }
 
-pub fn get_suit(n: u32) -> Suit {
-    Suit(1 << 8*n)
-}
-
 impl Suit {
+    pub fn from_n(n: u32) -> Self {
+        if n >= 4 { panic!("Bad suit number"); }
+        Suit(1 << 8*n)
+    }
+
     pub fn to_string(self) -> String {
         match self {
             HEART => "♥",
@@ -95,6 +96,11 @@ impl Card {
         i-1
     }
 
+    pub fn from_id(id: u32) -> Self {
+        if id > 31 { panic!("invalid card id"); }
+        Card(1 << id)
+    }
+
     pub fn rank(self) -> Rank {
         let Card(mut v) = self;
         let mut r: u32 = 0;
@@ -132,19 +138,15 @@ pub fn make_card(suit: Suit, rank: Rank) -> Card {
     Card(s * r)
 }
 
-pub fn get_card(id: u32) -> Card {
-    Card(1 << id)
-}
-
 #[test]
 fn card_test() {
     for i in 0..32 {
-        let card = get_card(i);
+        let card = Card::from_id(i);
         assert!(i == card.id());
     }
 
     for s in 0..4 {
-        let suit = get_suit(s);
+        let suit = Suit::from_n(s);
         for r in 0..8 {
             let rank = get_rank(r);
             let card = make_card(suit, rank);
@@ -204,7 +206,7 @@ impl Hand {
         let n = Wrapping(h ^ (h - 1)) + Wrapping(1);
         if n.0 == 0 {
             // We got an overflow. This means the desired bit it the leftmost one.
-            get_card(31)
+            Card::from_id(31)
         } else {
             // We just need to shift it back.
             Card(n.0 >> 1)
@@ -281,7 +283,7 @@ pub fn new_deck() -> Deck {
     let mut d = Deck{cards:Vec::with_capacity(32)};
 
     for i in 0..32 {
-        d.cards.push(get_card(i));
+        d.cards.push(Card::from_id(i));
     }
 
     d

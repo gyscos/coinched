@@ -1,4 +1,5 @@
 use super::game_manager::GameManager;
+use super::libcoinche::{bid,cards};
 
 use std::sync::Arc;
 use std::str::FromStr;
@@ -7,6 +8,7 @@ use rustc_serialize::json;
 
 use iron;
 use iron::prelude::*;
+use bodyparser;
 
 pub struct Server {
     port: u16,
@@ -149,12 +151,31 @@ macro_rules! check_len {
     };
 }
 
+macro_rules! my_try {
+    ( $x:expr ) => {
+
+        {
+            match $x {
+                Err(err) => return err_resp(&format!("{}", err)),
+                Ok(thing) => thing,
+            }
+        }
+    };
+}
+
 macro_rules! try_manager {
     ( $call:expr ) => {
+        json::encode(&my_try!($call)).unwrap()
+    };
+}
+
+macro_rules! read_body {
+    ( $x:expr, $name:expr ) => {
         {
-            match $call {
-                Err(err) => return err_resp(&format!("{}", err)),
-                Ok(thing) => json::encode(&thing).unwrap(),
+            match $x {
+                Ok(Some(thing)) => thing,
+                Ok(None) => return err_resp(&format!("body expected: {}", $name)),
+                Err(err) => return err_resp(&format!("Error parsing {}: {:?}", $name, err)),
             }
         }
     };
@@ -170,12 +191,12 @@ impl iron::Handler for Router {
 
 
         // Weird deref trick to go from &String to &str
-        let action: &str = &*req.url.path[0];
 
         let content_type: iron::mime::Mime = "application/json".parse::<iron::mime::Mime>().unwrap();
 
         match req.method {
             iron::method::Options => {
+                let action = &*req.url.path[0];
                 if ["hand", "trick", "contracts", "last_trick", "scores"].contains(&action) {
                     Ok(Response::with((iron::modifiers::Header(
                                            iron::headers::Allow(
@@ -195,7 +216,7 @@ impl iron::Handler for Router {
                 }
             },
             iron::method::Get => {
-                let response = match action {
+                let response = match &*req.url.path[0] {
                     "wait" => {
                         check_len!(req.url.path, 3);
                         let player_id = parse_id!("player", &*req.url.path[1]);
@@ -237,15 +258,49 @@ impl iron::Handler for Router {
                 // Read the JSON body
                 // ...
 
-                let response = match action {
+                let response = match &*req.url.path[0] {
                     "join" => {
                         check_len!(req.url.path, 1);
                         try_manager!(self.manager.join())
                     },
-                    "pass" => return help_resp(),
-                    "coinche" => return help_resp(),
-                    "bid" => return help_resp(),
-                    "play" => return help_resp(),
+                    "pass" => {
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        try_manager!(self.manager.pass(player_id))
+                    },
+                    "coinche" => {
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        try_manager!(self.manager.coinche(player_id))
+                    },
+                    "bid" => {
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        // Parse the body
+                        #[derive(Clone,RustcDecodable)]
+                        struct ContractBody {
+                            contract: String,
+                            suit: u32,
+                        }
+
+                        let contract = read_body!(req.get::<bodyparser::Struct<ContractBody>>(), "contract");
+                        let target = my_try!(bid::Target::from_str(&contract.contract));
+                        let trump = cards::Suit::from_n(contract.suit);
+                        try_manager!(self.manager.bid(player_id, (target, trump)))
+                    },
+                    "play" => {
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        // Parse the body
+                        #[derive(Clone,RustcDecodable)]
+                        struct CardBody {
+                            card: u32,
+                        }
+                        let card = read_body!(req.get::<bodyparser::Struct<CardBody>>(), "card");
+                        let card = cards::Card::from_id(card.card);
+
+                        try_manager!(self.manager.play_card(player_id, card))
+                    },
                     _ => return help_resp(),
                 };
 

@@ -547,12 +547,17 @@ impl GameManager {
 
     }
 
-    pub fn bid(&self, player_id: u32, contract: bid::Contract) -> ManagerResult<Event> {
+    pub fn bid(&self, player_id: u32, (target, trump): (bid::Target, cards::Suit)) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
         let mut party = info.party.write().unwrap();
-        party.bid(info.pos, contract)
+        party.bid(info.pos, bid::Contract {
+            trump: trump,
+            target: target,
+            author: info.pos,
+            coinche_level: 0,
+        })
     }
 
     pub fn pass(&self, player_id: u32) -> ManagerResult<Event> {
