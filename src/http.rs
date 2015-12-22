@@ -18,8 +18,8 @@ struct Router { manager: Arc<GameManager> }
 #[derive(RustcEncodable)]
 struct HelpAction {
     href: &'static str,
-    help: &'static str,
     method: &'static str,
+    help: &'static str,
 }
 
 #[derive(RustcEncodable)]
@@ -39,9 +39,49 @@ fn help_message() -> String {
                 help: "Join a new game.",
             },
             HelpAction {
+                href: "/pass/[PLAYER_ID]",
+                method: "POST",
+                help: "Pass during auction.",
+            },
+            HelpAction {
+                href: "/coinche/[PLAYER_ID]",
+                method: "POST",
+                help: "Coinche the opponent's bid during auction.",
+            },
+            HelpAction {
+                href: "/bid/[PLAYER_ID]",
+                method: "POST",
+                help: "Bid a contract during auction.",
+            },
+            HelpAction {
+                href: "/play/[PLAYER_ID]",
+                method: "POST",
+                help: "Play a card.",
+            },
+            HelpAction {
                 href: "/hand/[PLAYER_ID]",
                 method: "GET",
                 help: "Checks the current hand.",
+            },
+            HelpAction {
+                href: "/trick/[PLAYER_ID]",
+                method: "GET",
+                help: "Checks the current trick.",
+            },
+            HelpAction {
+                href: "/last_trick/[PLAYER_ID]",
+                method: "GET",
+                help: "Checks the last complete trick.",
+            },
+            HelpAction {
+                href: "/scores/[PLAYER_ID]",
+                method: "GET",
+                help: "Get the current scores.",
+            },
+            HelpAction {
+                href: "/pos/[PLAYER_ID]",
+                method: "GET",
+                help: "Get the player's position on the table.",
             },
             HelpAction {
                 href: "/wait/[PLAYER_ID]/[EVENT_ID]",
@@ -72,6 +112,52 @@ fn err_resp(msg: &str) -> IronResult<Response> {
                               iron::status::Ok,
                               json::encode(&Error { error: msg }).unwrap(),
                               )));
+}
+
+macro_rules! parse_id {
+    ( $name:expr, $value:expr ) => {
+        {
+            match u32::from_str($value) {
+                Ok(id) => id,
+                Err(e) => return err_resp(&format!("invalid {} ID: `{}` ({})", $name, $value, e)),
+            }
+        }
+    };
+}
+
+macro_rules! check_len {
+    ( $path:expr, 1 ) => {
+        {
+            if $path.len() != 1 {
+                return err_resp(&format!("incorrect parameters (Usage: /{})", $path[0]));
+            }
+        }
+    };
+    ( $path:expr, 2 ) => {
+        {
+            if $path.len() != 2 {
+                return err_resp(&format!("incorrect parameters (Usage: /{}/[PID])", $path[0]));
+            }
+        }
+    };
+    ( $path:expr, 3 ) => {
+        {
+            if $path.len() != 3 {
+                return err_resp(&format!("incorrect parameters (Usage: /{}/[PID]/[EID])", $path[0]));
+            }
+        }
+    };
+}
+
+macro_rules! try_manager {
+    ( $call:expr ) => {
+        {
+            match $call {
+                Err(err) => return err_resp(&format!("{}", err)),
+                Ok(thing) => json::encode(&thing).unwrap(),
+            }
+        }
+    };
 }
 
 impl iron::Handler for Router {
@@ -111,73 +197,35 @@ impl iron::Handler for Router {
             iron::method::Get => {
                 let response = match action {
                     "wait" => {
-                        if req.url.path.len() != 3 {
-                            return err_resp(&format!("incorrect parameters (Usage: /{}/[PID]/[EID])", action));
-                        }
-                        let player_id = match u32::from_str(&*req.url.path[1]) {
-                            Ok(id) => id,
-                            Err(e) => return err_resp(&format!("invalid player ID: `{}` ({})", req.url.path[1], e)),
-                        };
-                        let event_id = match usize::from_str(&*req.url.path[2]) {
-                            Ok(id) => id,
-                            Err(e) => return err_resp(&format!("invalid event ID: `{}` ({})", req.url.path[2], e)),
-                        };
-                        match self.manager.wait(player_id, event_id) {
-                            Err(err) => return err_resp(&format!("{}", err)),
-                            Ok(event) => json::encode(&event).unwrap(),
-                        }
+                        check_len!(req.url.path, 3);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        let event_id = parse_id!("event", &*req.url.path[2]) as usize;
+                        try_manager!(self.manager.wait(player_id, event_id))
                     },
                     "hand" => {
-                        if req.url.path.len() != 2 {
-                            return err_resp(&format!("incorrect parameters (Usage: /{}/[PID])", action));
-                        }
-                        let player_id = match u32::from_str(&*req.url.path[1]) {
-                            Ok(id) => id,
-                            Err(e) => return err_resp(&format!("invalid player ID: `{}` ({})", req.url.path[1], e)),
-                        };
-                        match self.manager.see_hand(player_id) {
-                            Err(err) => return err_resp(&format!("{}", err)),
-                            Ok(hand) => json::encode(&hand).unwrap(),
-                        }
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        try_manager!(self.manager.see_hand(player_id))
                     },
                     "trick" => {
-                        if req.url.path.len() != 2 {
-                            return err_resp(&format!("incorrect parameters (Usage: /{}/[PID])", action));
-                        }
-                        let player_id = match u32::from_str(&*req.url.path[1]) {
-                            Ok(id) => id,
-                            Err(e) => return err_resp(&format!("invalid player ID: `{}` ({})", req.url.path[1], e)),
-                        };
-                        match self.manager.see_trick(player_id) {
-                            Err(err) => return err_resp(&format!("{}", err)),
-                            Ok(trick) => json::encode(&trick).unwrap(),
-                        }
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        try_manager!(self.manager.see_trick(player_id))
                     },
                     "last_trick" => {
-                        if req.url.path.len() != 2 {
-                            return err_resp(&format!("incorrect parameters (Usage: /{}/[PID])", action));
-                        }
-                        let player_id = match u32::from_str(&*req.url.path[1]) {
-                            Ok(id) => id,
-                            Err(e) => return err_resp(&format!("invalid player ID: `{}` ({})", req.url.path[1], e)),
-                        };
-                        match self.manager.see_last_trick(player_id) {
-                            Err(err) => return err_resp(&format!("{}", err)),
-                            Ok(trick) => json::encode(&trick).unwrap(),
-                        }
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        try_manager!(self.manager.see_last_trick(player_id))
                     },
                     "scores" => {
-                        if req.url.path.len() != 2 {
-                            return err_resp(&format!("incorrect parameters (Usage: /{}/[PID])", action));
-                        }
-                        let player_id = match u32::from_str(&*req.url.path[1]) {
-                            Ok(id) => id,
-                            Err(e) => return err_resp(&format!("invalid player ID: `{}` ({})", req.url.path[1], e)),
-                        };
-                        match self.manager.see_scores(player_id) {
-                            Err(err) => return err_resp(&format!("{}", err)),
-                            Ok(trick) => json::encode(&trick).unwrap(),
-                        }
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        try_manager!(self.manager.see_scores(player_id))
+                    },
+                    "pos" => {
+                        check_len!(req.url.path, 2);
+                        let player_id = parse_id!("player", &*req.url.path[1]);
+                        try_manager!(self.manager.see_pos(player_id))
                     },
                     _ => return help_resp(),
                 };
@@ -190,10 +238,14 @@ impl iron::Handler for Router {
                 // ...
 
                 let response = match action {
-                    "join" => match self.manager.join() {
-                        Err(err) => return err_resp(&format!("{}", err)),
-                        Ok(info) => json::encode(&info).unwrap(),
+                    "join" => {
+                        check_len!(req.url.path, 1);
+                        try_manager!(self.manager.join())
                     },
+                    "pass" => return help_resp(),
+                    "coinche" => return help_resp(),
+                    "bid" => return help_resp(),
+                    "play" => return help_resp(),
                     _ => return help_resp(),
                 };
 
