@@ -3,7 +3,7 @@ name = "coinched"
 version = "0.0.1"
 dependencies = [
  "bodyparser 0.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "eventual 0.1.4 (git+https://github.com/carllerche/eventual)",
+ "eventual 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "iron 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -65,8 +65,8 @@ dependencies = [
 
 [[package]]
 name = "eventual"
-version = "0.1.4"
-source = "git+https://github.com/carllerche/eventual#43fdda25a0a275fec919bc449a159797362b28a2"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "log 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "syncbox 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
