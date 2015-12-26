@@ -5,6 +5,7 @@ dependencies = [
  "bodyparser 0.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "eventual 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "iron 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libcoinche 0.1.0 (git+https://github.com/Gyscos/libcoinche)",
  "rand 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.34 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -164,6 +165,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "libc"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "libcoinche"
+version = "0.1.0"
+source = "git+https://github.com/Gyscos/libcoinche#3fdddf6fa566035213756ff03b3ad983d5f14d9c"
+dependencies = [
+ "rand 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "libressl-pnacl-sys"
