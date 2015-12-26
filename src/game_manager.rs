@@ -57,7 +57,7 @@ pub enum Action {
 
 #[derive(Clone)]
 pub enum PlayerEvent {
-    Bidded(bid::Contract),
+    Bidded(cards::Suit, bid::Target),
     Coinched,
     Passed,
     CardPlayed(cards::Card),
@@ -66,9 +66,10 @@ pub enum PlayerEvent {
 impl rustc_serialize::Encodable for PlayerEvent {
     fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
         match self {
-            &PlayerEvent::Bidded(ref contract) => s.emit_struct("PlayerEvent", 2, |s| {
+            &PlayerEvent::Bidded(suit, target) => s.emit_struct("PlayerEvent", 3, |s| {
                 try!(s.emit_struct_field("type", 0, |s| "Bidded".encode(s)));
-                try!(s.emit_struct_field("contract", 1, |s| contract.encode(s)));
+                try!(s.emit_struct_field("suit", 1, |s| suit.encode(s)));
+                try!(s.emit_struct_field("target", 2, |s| target.encode(s)));
                 Ok(())
             }),
             &PlayerEvent::Coinched => s.emit_struct("PlayerEvent", 1, |s| {
@@ -211,7 +212,7 @@ pub enum Game {
 }
 
 fn make_game(first: pos::PlayerPos) -> (bid::Auction, EventType) {
-    let auction = bid::new_auction(first);
+    let auction = bid::Auction::new(first);
     let hands = auction.hands();
 
     let event = EventType::NewGame { first: first, hands: hands };
@@ -291,13 +292,13 @@ impl Party {
         self.add_event(EventType::PartyCancelled("player left".to_string()));
     }
 
-    fn bid(&mut self, pos: pos::PlayerPos, contract: bid::Contract) -> ManagerResult<Event> {
+    fn bid(&mut self, pos: pos::PlayerPos, trump: cards::Suit, target: bid::Target) -> ManagerResult<Event> {
         let state = {
             let auction = try!(self.get_auction_mut());
-            try!(auction.bid(contract.clone()))
+            try!(auction.bid(pos, trump, target))
         };
 
-        let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::Bidded(contract.clone())));
+        let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::Bidded(trump, target)));
         match state {
             bid::AuctionState::Over => self.complete_auction(),
             _ => (),
@@ -307,7 +308,10 @@ impl Party {
     }
 
     fn pass(&mut self, pos: pos::PlayerPos) -> Result<Event,ManagerError> {
-        let state = try!(self.get_auction_mut()).pass();
+        let state = {
+            let auction = try!(self.get_auction_mut());
+            try!(auction.pass(pos))
+        };
 
         let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::Passed));
         match state {
@@ -325,7 +329,7 @@ impl Party {
     fn coinche(&mut self, pos: pos::PlayerPos) -> Result<Event, ManagerError> {
         let state = {
             let auction = try!(self.get_auction_mut());
-            try!(auction.coinche())
+            try!(auction.coinche(pos))
         };
 
         let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::Coinched));
@@ -552,12 +556,7 @@ impl GameManager {
         let info = try!(list.get_player_info(player_id));
 
         let mut party = info.party.write().unwrap();
-        party.bid(info.pos, bid::Contract {
-            trump: trump,
-            target: target,
-            author: info.pos,
-            coinche_level: 0,
-        })
+        party.bid(info.pos, trump, target)
     }
 
     pub fn pass(&self, player_id: u32) -> ManagerResult<Event> {

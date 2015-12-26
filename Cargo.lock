@@ -169,7 +169,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "libcoinche"
 version = "0.1.0"
-source = "git+https://github.com/Gyscos/libcoinche#3fdddf6fa566035213756ff03b3ad983d5f14d9c"
+source = "git+https://github.com/Gyscos/libcoinche#5d63beb8cd56181e474e4471f503b77699f85146"
 dependencies = [
  "rand 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -202,7 +202,7 @@ version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "log 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 0.6.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 0.6.7 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -311,7 +311,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "serde"
-version = "0.6.6"
+version = "0.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "num 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
