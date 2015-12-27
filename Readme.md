@@ -1,6 +1,9 @@
 coinched
 ========
 
+[![Build Status](https://travis-ci.org/Gyscos/coinched.svg?branch=master)](https://travis-ci.org/Gyscos/coinched)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
 A [coinche](https://en.wikipedia.org/wiki/Coinche) server.
 
 It uses [libcoinche](https://github.com/Gyscos/libcoinche) to model a game of
