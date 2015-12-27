@@ -230,18 +230,18 @@ pub struct Party {
     observers: Mutex<Vec<Complete<Event,()>>>,
 }
 
-fn new_party(first: pos::PlayerPos) -> Party {
-    let (auction,event) = make_game(first);
-    Party {
-        first: first,
-        game: Game::Bidding(auction),
-        scores: [0;2],
-        events: vec![event],
-        observers: Mutex::new(Vec::new()),
-    }
-}
-
 impl Party {
+    fn new(first: pos::PlayerPos) -> Self {
+        let (auction,event) = make_game(first);
+        Party {
+            first: first,
+            game: Game::Bidding(auction),
+            scores: [0;2],
+            events: vec![event],
+            observers: Mutex::new(Vec::new()),
+        }
+    }
+
     fn add_event(&mut self, event: EventType) -> Event {
         let ev = Event{
             event: event.clone(),
@@ -372,7 +372,7 @@ impl Party {
                 self.add_event(EventType::TrickOver{ winner: winner });
                 match game_result {
                     game::GameResult::Nothing => (),
-                    game::GameResult::GameOver(points, winners, scores) => {
+                    game::GameResult::GameOver{points, winners, scores} => {
                         for i in 0..2 { self.scores[i] += scores[i]; }
                         self.add_event(EventType::GameOver {
                             points: points,
@@ -509,7 +509,7 @@ impl GameManager {
 
         // println!("IDS: {:?}", ids);
 
-        let party = Arc::new(RwLock::new(new_party(pos::P0)));
+        let party = Arc::new(RwLock::new(Party::new(pos::P0)));
         // Kickstart it with a new game!
 
         // Prepare the players info
