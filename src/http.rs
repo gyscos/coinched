@@ -290,12 +290,12 @@ impl iron::Handler for Router {
                         // Parse the body
                         #[derive(Clone,RustcDecodable)]
                         struct ContractBody {
-                            contract: String,
+                            target: String,
                             suit: u32,
                         }
 
                         let contract = read_body!(req.get::<bodyparser::Struct<ContractBody>>(), "contract");
-                        let target = my_try!(bid::Target::from_str(&contract.contract));
+                        let target = my_try!(bid::Target::from_str(&contract.target));
                         let trump = cards::Suit::from_n(contract.suit);
                         try_manager!(self.manager.bid(player_id, (target, trump)))
                     },
