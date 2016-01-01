@@ -1,3 +1,5 @@
+//! A game manager, mostly for the server.
+
 use rand::{thread_rng,Rng};
 use time;
 
@@ -6,196 +8,77 @@ use std::collections::HashMap;
 use std::sync::{Arc,RwLock,Mutex};
 use std::convert::From;
 
-use super::libcoinche::{bid,cards,pos,game,trick};
+use libcoinche::{bid,cards,pos,game,trick};
+use event::{Event, EventType, PlayerEvent};
 
-use rustc_serialize;
 use eventual::{Future,Complete,Async};
 
-pub type ManagerResult <T> = Result<T, ManagerError>;
+use self::FutureResult::{Ready, Waiting};
 
-pub enum ManagerError {
+enum FutureResult<T: Send + 'static> {
+    Ready(T),
+    Waiting(Future<T,()>),
+}
+
+type WaitResult = FutureResult<Event>;
+type JoinResult = FutureResult<NewPartyInfo>;
+
+pub type ManagerResult <T> = Result<T, Error>;
+
+/// A possible error.
+pub enum Error {
+    /// The given player ID is not associated with an actual game
     BadPlayerId,
+    /// The given event ID is not associated with an actual event
     BadEventId,
 
+    /// Player tried to play a card during auction.
     PlayInAuction,
+    /// Player tried to bid during card play.
     BidInGame,
 
+    /// An error occured during bidding.
     Bid(bid::BidError),
+    /// An error occured during card play.
     Play(game::PlayError),
 }
 
-impl fmt::Display for ManagerError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ManagerError::BadPlayerId => write!(f, "player not found"),
-            &ManagerError::BadEventId  => write!(f, "event not found"),
-            &ManagerError::PlayInAuction => write!(f, "cannot play during auction"),
-            &ManagerError::BidInGame => write!(f, "cannot bid during card play"),
-            &ManagerError::Bid(ref error) => write!(f, "{}", error),
-            &ManagerError::Play(ref error) => write!(f, "{}", error),
+            &Error::BadPlayerId => write!(f, "player not found"),
+            &Error::BadEventId  => write!(f, "event not found"),
+            &Error::PlayInAuction => write!(f, "cannot play during auction"),
+            &Error::BidInGame => write!(f, "cannot bid during card play"),
+            &Error::Bid(ref error) => write!(f, "{}", error),
+            &Error::Play(ref error) => write!(f, "{}", error),
         }
     }
 }
 
-impl From<bid::BidError> for ManagerError {
-    fn from(err: bid::BidError) -> ManagerError {
-        ManagerError::Bid(err)
+impl From<bid::BidError> for Error {
+    fn from(err: bid::BidError) -> Error {
+        Error::Bid(err)
     }
 }
-impl From<game::PlayError> for ManagerError {
-    fn from(err: game::PlayError) -> ManagerError {
-        ManagerError::Play(err)
-    }
-}
-
-pub enum Action {
-    Bid(bid::Contract),
-    Coinche,
-    Pass,
-    Play(cards::Card),
-}
-
-#[derive(Clone)]
-pub enum PlayerEvent {
-    Bidded(cards::Suit, bid::Target),
-    Coinched,
-    Passed,
-    CardPlayed(cards::Card),
-}
-
-impl rustc_serialize::Encodable for PlayerEvent {
-    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        match self {
-            &PlayerEvent::Bidded(suit, target) => s.emit_struct("PlayerEvent", 3, |s| {
-                try!(s.emit_struct_field("type", 0, |s| "Bidded".encode(s)));
-                try!(s.emit_struct_field("suit", 1, |s| suit.encode(s)));
-                try!(s.emit_struct_field("target", 2, |s| target.encode(s)));
-                Ok(())
-            }),
-            &PlayerEvent::Coinched => s.emit_struct("PlayerEvent", 1, |s| {
-                s.emit_struct_field("type", 0, |s| "Coinched".encode(s))
-            }),
-            &PlayerEvent::Passed => s.emit_struct("PlayerEvent", 1, |s| {
-                s.emit_struct_field("type", 0, |s| "Passed".encode(s))
-            }),
-            &PlayerEvent::CardPlayed(card) => s.emit_struct("PlayerEvent", 2, |s| {
-                try!(s.emit_struct_field("type", 0, |s| "CardPlayed".encode(s)));
-                try!(s.emit_struct_field("card", 1, |s| card.encode(s)));
-                Ok(())
-            }),
-        }
+impl From<game::PlayError> for Error {
+    fn from(err: game::PlayError) -> Error {
+        Error::Play(err)
     }
 }
 
-// Player just joined a new party. He's given a player id, and his position.
+/// Player just joined a new party. He's given a player id, and his position.
 #[derive(RustcEncodable)]
 pub struct NewPartyInfo {
+    /// Player ID, used in every request.
     pub player_id: u32,
+    /// Player position in the table.
     pub player_pos: pos::PlayerPos,
-}
-
-// Represents an event that can happen during the game.
-#[derive(Clone)]
-pub enum EventType {
-    // The party is cancelled. Contains an optional explanation.
-    PartyCancelled(String),
-
-    // A player did something!
-    FromPlayer(pos::PlayerPos, PlayerEvent),
-
-    // Bid over: contains the contract and the author
-    BidOver(bid::Contract),
-    // The bid was cancelled, probably because no one bidded anything.
-    // A new game is probably on its way.
-    BidCancelled,
-
-    // Trick over: contains the winner
-    TrickOver { winner: pos::PlayerPos },
-
-    // New game: contains the first player, and the player's hand
-    NewGame { first: pos::PlayerPos, hands: [cards::Hand;4] },
-    NewGameRelative { first: pos::PlayerPos, hand: cards::Hand },
-
-    // Game over: contains scores
-    GameOver { points: [i32;2], winner: pos::Team, scores: [i32;2] },
-}
-
-impl EventType {
-    pub fn relativize(&self, from: pos::PlayerPos) -> Self {
-        match self {
-            &EventType::NewGame { first, hands } =>
-                EventType::NewGameRelative { first: first, hand: hands[from.0] },
-            _ => self.clone(),
-        }
-    }
-}
-
-// Ugly serialization...
-impl rustc_serialize::Encodable for EventType {
-    fn encode<S: rustc_serialize::Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        match self {
-            &EventType::PartyCancelled(ref msg) => s.emit_struct("Event", 2, |s| {
-                try!(s.emit_struct_field("type", 0, |s| "PartyCancelled".encode(s)));
-                try!(s.emit_struct_field("msg", 1, |s| msg.encode(s)));
-                Ok(())
-            }),
-            &EventType::BidCancelled => s.emit_struct("Event", 1, |s| {
-                s.emit_struct_field("type", 0, |s| "BidCancelled".encode(s))
-            }),
-            &EventType::BidOver(ref contract) => s.emit_struct("Event", 2, |s| {
-                try!(s.emit_struct_field("type", 0, |s| "BidOver".encode(s)));
-                try!(s.emit_struct_field("contract", 1, |s| contract.encode(s)));
-                Ok(())
-            }),
-            &EventType::TrickOver { winner: pos } => s.emit_struct("Event", 2, |s| {
-                try!(s.emit_struct_field("type", 0, |s| "TrickOver".encode(s)));
-                try!(s.emit_struct_field("pos", 1, |s| pos.encode(s)));
-                Ok(())
-            }),
-            &EventType::FromPlayer(pos, ref event) => s.emit_struct("Event", 3, |s| {
-                try!(s.emit_struct_field("type", 0, |s| "FromPlayer".encode(s)));
-                try!(s.emit_struct_field("pos", 1, |s| pos.encode(s)));
-                try!(s.emit_struct_field("event", 2, |s| event.encode(s)));
-                Ok(())
-            }),
-            &EventType::NewGame { first, ref hands } => s.emit_struct("Event", 3, |s| {
-                // Should rarely happen
-                try!(s.emit_struct_field("type", 0, |s| "NewGameGlobal".encode(s)));
-                try!(s.emit_struct_field("first", 1, |s| first.encode(s)));
-                try!(s.emit_struct_field("hands", 2, |s| hands.encode(s)));
-                Ok(())
-            }),
-            &EventType::NewGameRelative { first, ref hand } => s.emit_struct("Event", 3, |s| {
-                try!(s.emit_struct_field("type", 0, |s| "NewGame".encode(s)));
-                try!(s.emit_struct_field("first", 1, |s| first.encode(s)));
-                try!(s.emit_struct_field("cards", 2, |s| hand.encode(s)));
-                Ok(())
-            }),
-            &EventType::GameOver { points, winner, scores } => s.emit_struct("Event", 4, |s| {
-                try!(s.emit_struct_field("type", 0, |s| "GameOver".encode(s)));
-                try!(s.emit_struct_field("points", 1, |s| points.encode(s)));
-                try!(s.emit_struct_field("winner", 2, |s| winner.encode(s)));
-                try!(s.emit_struct_field("scores", 3, |s| scores.encode(s)));
-                Ok(())
-            }),
-        }
-    }
-}
-
-#[derive(Clone,RustcEncodable)]
-pub struct Event {
-    pub event: EventType,
-    pub id: usize,
-}
-
-pub struct Order {
-    pub author: pos::PlayerPos,
-    pub action: Action
 }
 
 /// Base class for managing matchmaking.
 ///
-/// It is the main entry point for the API.
+/// It is the main entry point for the server API.
 /// It offers a thread-safe access to various actions.
 pub struct GameManager {
     party_list: RwLock<PlayerList>,
@@ -211,6 +94,8 @@ pub enum Game {
     Playing(game::GameState),
 }
 
+// Creates a new game, starting with an auction.
+// Also returns a NewGame Event with the players cards.
 fn make_game(first: pos::PlayerPos) -> (bid::Auction, EventType) {
     let auction = bid::Auction::new(first);
     let hands = auction.hands();
@@ -220,7 +105,8 @@ fn make_game(first: pos::PlayerPos) -> (bid::Auction, EventType) {
     (auction,event)
 }
 
-pub struct Party {
+/// Represents a party
+struct Party {
     game: Game,
     first: pos::PlayerPos,
 
@@ -260,20 +146,20 @@ impl Party {
     fn get_auction_mut(&mut self) -> ManagerResult<&mut bid::Auction> {
         match self.game {
             Game::Bidding(ref mut auction) => Ok(auction),
-            Game::Playing(_) => Err(ManagerError::BidInGame),
+            Game::Playing(_) => Err(Error::BidInGame),
         }
     }
 
     fn get_game(&self) -> ManagerResult<&game::GameState> {
         match self.game {
-            Game::Bidding(_) => Err(ManagerError::PlayInAuction),
+            Game::Bidding(_) => Err(Error::PlayInAuction),
             Game::Playing(ref game) => Ok(game),
         }
     }
 
     fn get_game_mut(&mut self) -> ManagerResult<&mut game::GameState> {
         match self.game {
-            Game::Bidding(_) => Err(ManagerError::PlayInAuction),
+            Game::Bidding(_) => Err(Error::PlayInAuction),
             Game::Playing(ref mut game) => Ok(game),
         }
     }
@@ -307,7 +193,7 @@ impl Party {
         Ok(main_event)
     }
 
-    fn pass(&mut self, pos: pos::PlayerPos) -> Result<Event,ManagerError> {
+    fn pass(&mut self, pos: pos::PlayerPos) -> Result<Event,Error> {
         let state = {
             let auction = try!(self.get_auction_mut());
             try!(auction.pass(pos))
@@ -326,7 +212,7 @@ impl Party {
         Ok(main_event)
     }
 
-    fn coinche(&mut self, pos: pos::PlayerPos) -> Result<Event, ManagerError> {
+    fn coinche(&mut self, pos: pos::PlayerPos) -> Result<Event, Error> {
         let state = {
             let auction = try!(self.get_auction_mut());
             try!(auction.coinche(pos))
@@ -357,7 +243,7 @@ impl Party {
         self.game = Game::Playing(game);
     }
 
-    fn play_card(&mut self, pos: pos::PlayerPos, card: cards::Card) -> Result<Event,ManagerError> {
+    fn play_card(&mut self, pos: pos::PlayerPos, card: cards::Card) -> Result<Event,Error> {
         let result = {
             let game = try!(self.get_game_mut());
             try!(game.play_card(pos, card))
@@ -389,13 +275,19 @@ impl Party {
     }
 }
 
-pub struct PlayerInfo {
+// Information for a current player
+struct PlayerInfo {
+    // The party he's playing in
     pub party: Arc<RwLock<Party>>,
+    // His position in the table
     pub pos: pos::PlayerPos,
+    // Last time we received something from him
+    // (to detect inactivity, and disconnect him)
     pub last_time: Mutex<time::Tm>,
 }
 
-pub struct PlayerList {
+// Maps player IDs to PlayerInfo
+struct PlayerList {
     pub player_map: HashMap<u32,PlayerInfo>,
 }
 
@@ -406,9 +298,9 @@ impl PlayerList {
         }
     }
 
-    fn get_player_info(&self, player_id: u32) -> Result<&PlayerInfo,ManagerError> {
+    fn get_player_info(&self, player_id: u32) -> Result<&PlayerInfo,Error> {
         match self.player_map.get(&player_id) {
-            None => Err(ManagerError::BadPlayerId),
+            None => Err(Error::BadPlayerId),
             Some(info) => {
                 // Update the last active time
                 *info.last_time.lock().unwrap() = time::now();
@@ -417,6 +309,9 @@ impl PlayerList {
         }
     }
 
+    // Creates 4 random IDs, avoiding clashes with the ones currently in use.
+    // TODO: if it becomes performance critical, we could skip the conflict check
+    //       and hope that it won't happen.
     fn make_ids(&self) -> [u32; 4] {
         // Expect self.player_map to be locked
         let mut result = [0;4];
@@ -452,15 +347,6 @@ impl PlayerList {
     }
 }
 
-enum WaitResult {
-    Ready(Event),
-    Waiting(Future<Event,()>),
-}
-
-enum JoinResult {
-    Ready(NewPartyInfo),
-    Waiting(Future<NewPartyInfo,()>),
-}
 
 impl GameManager {
     pub fn new() -> GameManager {
@@ -475,8 +361,8 @@ impl GameManager {
         match self.get_join_result() {
             // TODO: add a timeout (max: 20s)
             // TODO: handle cancelled join?
-            JoinResult::Ready(info) => Ok(info),
-            JoinResult::Waiting(future) => Ok(future.await().unwrap()),
+            Ready(info) => Ok(info),
+            Waiting(future) => Ok(future.await().unwrap()),
         }
     }
 
@@ -491,11 +377,11 @@ impl GameManager {
                waiters.pop().unwrap(),
             ]);
             // println!("PARTEY INCOMING");
-            return JoinResult::Ready(info);
+            return Ready(info);
         } else {
             let (promise,future) = Future::pair();
             waiters.push(promise);
-            return JoinResult::Waiting(future);
+            return Waiting(future);
         }
     }
 
@@ -635,10 +521,10 @@ impl GameManager {
         // TODO: add a timeout (~15s?)
 
         match res {
-            WaitResult::Ready(event) => Ok(event),
+            Ready(event) => Ok(event),
             // TODO: handle case where the wait is cancelled
             // (don't unwrap, return an error instead?)
-            WaitResult::Waiting(future) => Ok(future.await().unwrap()),
+            Waiting(future) => Ok(future.await().unwrap()),
         }
     }
 
@@ -651,13 +537,13 @@ impl GameManager {
         let party = info.party.read().unwrap();
 
         if party.events.len() > event_id {
-            return Ok(WaitResult::Ready(Event {
+            return Ok(Ready(Event {
                 event: party.events[event_id].relativize(info.pos),
                 id: event_id,
             }));
         } else if event_id > party.events.len() {
             // We are too ambitious! One event at a time!
-            return Err(ManagerError::BadEventId);
+            return Err(Error::BadEventId);
         }
 
         // Ok, so we'll have to wait a bit.
@@ -665,7 +551,7 @@ impl GameManager {
         let (promise, future) = Future::pair();
         party.observers.lock().unwrap().push(promise);
 
-        Ok(WaitResult::Waiting(future))
+        Ok(Waiting(future))
     }
 }
 

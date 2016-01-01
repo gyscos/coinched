@@ -6,5 +6,8 @@ extern crate rustc_serialize;
 extern crate eventual;
 extern crate libcoinche;
 
+pub mod event;
 pub mod game_manager;
 pub mod http;
+
+pub use game_manager::Error;
