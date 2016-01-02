@@ -1,5 +1,7 @@
-use super::game_manager::GameManager;
-use super::libcoinche::{bid,cards};
+use super::{ContractBody, CardBody};
+
+use game_manager::GameManager;
+use libcoinche::{bid,cards};
 
 use std::sync::Arc;
 use std::str::FromStr;
@@ -10,10 +12,6 @@ use iron;
 use iron::prelude::*;
 use bodyparser;
 
-pub struct Server {
-    port: u16,
-    manager: Arc<GameManager>,
-}
 
 struct Router { manager: Arc<GameManager> }
 
@@ -28,6 +26,11 @@ struct HelpAction {
 struct HelpMessage {
     title: &'static str,
     actions: Vec<HelpAction>,
+}
+
+pub struct Server {
+    port: u16,
+    manager: Arc<GameManager>,
 }
 
 fn help_message() -> String {
@@ -226,31 +229,37 @@ impl iron::Handler for Router {
                         check_len!(req.url.path, 3);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         let event_id = parse_id!("event", &*req.url.path[2]) as usize;
+                        // Result is an Event
                         try_manager!(self.manager.wait(player_id, event_id))
                     },
                     "hand" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
+                        // Result is a cards::Hand = u32
                         try_manager!(self.manager.see_hand(player_id))
                     },
                     "trick" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
+                        // Result is a trick::Trick
                         try_manager!(self.manager.see_trick(player_id))
                     },
                     "last_trick" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
+                        // Result is a trick::Trick
                         try_manager!(self.manager.see_last_trick(player_id))
                     },
                     "scores" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
+                        // Result is a [i32; 2]
                         try_manager!(self.manager.see_scores(player_id))
                     },
                     "pos" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
+                        // Result is a pos::PlayerPos = usize
                         try_manager!(self.manager.see_pos(player_id))
                     },
                     _ => return help_resp(),
@@ -266,50 +275,47 @@ impl iron::Handler for Router {
                 let response = match &*req.url.path[0] {
                     "join" => {
                         check_len!(req.url.path, 1);
+                        // Result is a NewPartyInfo
                         try_manager!(self.manager.join())
                     },
                     "leave" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         self.manager.leave(player_id);
+                        // Result is a string - but who cares?
                         r#""ok""#.to_string()
                     },
                     "pass" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
+                        // Result is an event
                         try_manager!(self.manager.pass(player_id))
                     },
                     "coinche" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
+                        // Result is an event
                         try_manager!(self.manager.coinche(player_id))
                     },
                     "bid" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Parse the body
-                        #[derive(Clone,RustcDecodable)]
-                        struct ContractBody {
-                            target: String,
-                            suit: u32,
-                        }
 
                         let contract = read_body!(req.get::<bodyparser::Struct<ContractBody>>(), "contract");
                         let target = my_try!(bid::Target::from_str(&contract.target));
                         let trump = cards::Suit::from_n(contract.suit);
+                        // Result is an event
                         try_manager!(self.manager.bid(player_id, (target, trump)))
                     },
                     "play" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Parse the body
-                        #[derive(Clone,RustcDecodable)]
-                        struct CardBody {
-                            card: u32,
-                        }
                         let card = read_body!(req.get::<bodyparser::Struct<CardBody>>(), "card");
                         let card = cards::Card::from_id(card.card);
 
+                        // Result is an event
                         try_manager!(self.manager.play_card(player_id, card))
                     },
                     _ => return help_resp(),

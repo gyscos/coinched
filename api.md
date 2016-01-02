@@ -18,6 +18,11 @@ Player refinement:
 # Group Public
 These methods can be called without a player ID.
 
+## GET /help
+Returns an help message with the available API endpoints.
+
++ Response 404 (applicatiion/json)
+
 ## POST /join
 Attempt to join a new game. Will block until a party is found.
 
