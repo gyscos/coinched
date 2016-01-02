@@ -1,7 +1,7 @@
 use super::{ContractBody, CardBody};
 
 use game_manager::GameManager;
-use libcoinche::{bid,cards};
+use libcoinche::{bid, cards};
 
 use std::sync::Arc;
 use std::str::FromStr;
@@ -13,7 +13,9 @@ use iron::prelude::*;
 use bodyparser;
 
 
-struct Router { manager: Arc<GameManager> }
+struct Router {
+    manager: Arc<GameManager>,
+}
 
 #[derive(RustcEncodable)]
 struct HelpAction {
@@ -98,30 +100,28 @@ fn help_message() -> String {
                 method: "GET",
                 help: "Wait until the next event, or return it if it already happened.",
             },
-        ]
-    }).unwrap()
+        ],
+    })
+        .unwrap()
 }
 
 
 fn help_resp() -> IronResult<Response> {
     let content_type: iron::mime::Mime = "application/json".parse::<iron::mime::Mime>().unwrap();
-    return Ok(Response::with((content_type,
-                              iron::status::NotFound,
-                              help_message())));
+    return Ok(Response::with((content_type, iron::status::NotFound, help_message())));
 }
 
 fn err_resp(msg: &str) -> IronResult<Response> {
     let content_type: iron::mime::Mime = "application/json".parse::<iron::mime::Mime>().unwrap();
 
     #[derive(RustcEncodable)]
-    struct Error<'a>{
+    struct Error<'a> {
         error: &'a str,
     }
 
     return Ok(Response::with((content_type,
                               iron::status::Ok,
-                              json::encode(&Error { error: msg }).unwrap(),
-                              )));
+                              json::encode(&Error { error: msg }).unwrap())));
 }
 
 macro_rules! parse_id {
@@ -153,7 +153,9 @@ macro_rules! check_len {
     ( $path:expr, 3 ) => {
         {
             if $path.len() != 3 {
-                return err_resp(&format!("incorrect parameters (Usage: /{}/[PID]/[EID])", $path[0]));
+                return err_resp(&format!(
+                        "incorrect parameters (Usage: /{}/[PID]/[EID])",
+                        $path[0]));
             }
         }
     };
@@ -200,29 +202,27 @@ impl iron::Handler for Router {
 
         // Weird deref trick to go from &String to &str
 
-        let content_type: iron::mime::Mime = "application/json".parse::<iron::mime::Mime>().unwrap();
+        let content_type: iron::mime::Mime = "application/json"
+                                                 .parse::<iron::mime::Mime>()
+                                                 .unwrap();
 
         match req.method {
             iron::method::Options => {
                 let action = &*req.url.path[0];
                 if ["hand", "trick", "last_trick", "scores", "pos"].contains(&action) {
-                    Ok(Response::with((iron::modifiers::Header(
-                                           iron::headers::Allow(
-                                               vec![
+                    Ok(Response::with((iron::modifiers::Header(iron::headers::Allow(vec![
                                                    iron::method::Get,
                                                    iron::method::Options])),
                                        iron::status::Ok)))
                 } else if ["pass", "coinche", "bid", "play", "join", "leave"].contains(&action) {
-                    Ok(Response::with((iron::modifiers::Header(
-                                           iron::headers::Allow(
-                                               vec![
+                    Ok(Response::with((iron::modifiers::Header(iron::headers::Allow(vec![
                                                    iron::method::Post,
                                                    iron::method::Options])),
                                        iron::status::Ok)))
                 } else {
                     help_resp()
                 }
-            },
+            }
             iron::method::Get => {
                 let response = match &*req.url.path[0] {
                     "wait" => {
@@ -231,43 +231,43 @@ impl iron::Handler for Router {
                         let event_id = parse_id!("event", &*req.url.path[2]) as usize;
                         // Result is an Event
                         try_manager!(self.manager.wait(player_id, event_id))
-                    },
+                    }
                     "hand" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Result is a cards::Hand = u32
                         try_manager!(self.manager.see_hand(player_id))
-                    },
+                    }
                     "trick" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Result is a trick::Trick
                         try_manager!(self.manager.see_trick(player_id))
-                    },
+                    }
                     "last_trick" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Result is a trick::Trick
                         try_manager!(self.manager.see_last_trick(player_id))
-                    },
+                    }
                     "scores" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Result is a [i32; 2]
                         try_manager!(self.manager.see_scores(player_id))
-                    },
+                    }
                     "pos" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Result is a pos::PlayerPos = usize
                         try_manager!(self.manager.see_pos(player_id))
-                    },
+                    }
                     _ => return help_resp(),
                 };
 
                 Ok(Response::with((content_type, iron::status::Ok, response)))
 
-            },
+            }
             iron::method::Post => {
                 // Read the JSON body
                 // ...
@@ -277,37 +277,38 @@ impl iron::Handler for Router {
                         check_len!(req.url.path, 1);
                         // Result is a NewPartyInfo
                         try_manager!(self.manager.join())
-                    },
+                    }
                     "leave" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         self.manager.leave(player_id);
                         // Result is a string - but who cares?
                         r#""ok""#.to_string()
-                    },
+                    }
                     "pass" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Result is an event
                         try_manager!(self.manager.pass(player_id))
-                    },
+                    }
                     "coinche" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Result is an event
                         try_manager!(self.manager.coinche(player_id))
-                    },
+                    }
                     "bid" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
                         // Parse the body
 
-                        let contract = read_body!(req.get::<bodyparser::Struct<ContractBody>>(), "contract");
+                        let contract = read_body!(req.get::<bodyparser::Struct<ContractBody>>(),
+                                                  "contract");
                         let target = my_try!(bid::Target::from_str(&contract.target));
                         let trump = cards::Suit::from_n(contract.suit);
                         // Result is an event
                         try_manager!(self.manager.bid(player_id, (target, trump)))
-                    },
+                    }
                     "play" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
@@ -317,12 +318,12 @@ impl iron::Handler for Router {
 
                         // Result is an event
                         try_manager!(self.manager.play_card(player_id, card))
-                    },
+                    }
                     _ => return help_resp(),
                 };
 
                 Ok(Response::with((content_type, iron::status::Ok, response)))
-            },
+            }
             _ => help_resp(),
         }
     }

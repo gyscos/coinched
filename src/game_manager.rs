@@ -1,29 +1,29 @@
 //! A game manager, mostly for the server.
 
-use rand::{thread_rng,Rng};
+use rand::{thread_rng, Rng};
 use time;
 
 use std::fmt;
 use std::collections::HashMap;
-use std::sync::{Arc,RwLock,Mutex};
+use std::sync::{Arc, RwLock, Mutex};
 use std::convert::From;
 
-use libcoinche::{bid,cards,pos,game,trick};
+use libcoinche::{bid, cards, pos, game, trick};
 use event::{Event, EventType, PlayerEvent};
 
-use eventual::{Future,Complete,Async};
+use eventual::{Future, Complete, Async};
 
 use self::FutureResult::{Ready, Waiting};
 
 enum FutureResult<T: Send + 'static> {
     Ready(T),
-    Waiting(Future<T,()>),
+    Waiting(Future<T, ()>),
 }
 
 type WaitResult = FutureResult<Event>;
 type JoinResult = FutureResult<NewPartyInfo>;
 
-pub type ManagerResult <T> = Result<T, Error>;
+pub type ManagerResult<T> = Result<T, Error>;
 
 /// A possible error.
 pub enum Error {
@@ -47,7 +47,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Error::BadPlayerId => write!(f, "player not found"),
-            &Error::BadEventId  => write!(f, "event not found"),
+            &Error::BadEventId => write!(f, "event not found"),
             &Error::PlayInAuction => write!(f, "cannot play during auction"),
             &Error::BidInGame => write!(f, "cannot bid during card play"),
             &Error::Bid(ref error) => write!(f, "{}", error),
@@ -83,7 +83,7 @@ pub struct NewPartyInfo {
 pub struct GameManager {
     party_list: RwLock<PlayerList>,
 
-    waiting_list: Mutex<Vec<Complete<NewPartyInfo,()>>>,
+    waiting_list: Mutex<Vec<Complete<NewPartyInfo, ()>>>,
 }
 
 /// Describe a single game.
@@ -100,9 +100,12 @@ fn make_game(first: pos::PlayerPos) -> (bid::Auction, EventType) {
     let auction = bid::Auction::new(first);
     let hands = auction.hands();
 
-    let event = EventType::NewGame { first: first, hands: hands };
+    let event = EventType::NewGame {
+        first: first,
+        hands: hands,
+    };
 
-    (auction,event)
+    (auction, event)
 }
 
 /// Represents a party
@@ -113,23 +116,23 @@ struct Party {
     scores: [i32; 2],
 
     events: Vec<EventType>,
-    observers: Mutex<Vec<Complete<Event,()>>>,
+    observers: Mutex<Vec<Complete<Event, ()>>>,
 }
 
 impl Party {
     fn new(first: pos::PlayerPos) -> Self {
-        let (auction,event) = make_game(first);
+        let (auction, event) = make_game(first);
         Party {
             first: first,
             game: Game::Bidding(auction),
-            scores: [0;2],
+            scores: [0; 2],
             events: vec![event],
             observers: Mutex::new(Vec::new()),
         }
     }
 
     fn add_event(&mut self, event: EventType) -> Event {
-        let ev = Event{
+        let ev = Event {
             event: event.clone(),
             id: self.events.len(),
         };
@@ -178,13 +181,18 @@ impl Party {
         self.add_event(EventType::PartyCancelled("player left".to_string()));
     }
 
-    fn bid(&mut self, pos: pos::PlayerPos, trump: cards::Suit, target: bid::Target) -> ManagerResult<Event> {
+    fn bid(&mut self,
+           pos: pos::PlayerPos,
+           trump: cards::Suit,
+           target: bid::Target)
+           -> ManagerResult<Event> {
         let state = {
             let auction = try!(self.get_auction_mut());
             try!(auction.bid(pos, trump, target))
         };
 
-        let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::Bidded(trump, target)));
+        let main_event = self.add_event(EventType::FromPlayer(pos,
+                                                              PlayerEvent::Bidded(trump, target)));
         match state {
             bid::AuctionState::Over => self.complete_auction(),
             _ => (),
@@ -193,7 +201,7 @@ impl Party {
         Ok(main_event)
     }
 
-    fn pass(&mut self, pos: pos::PlayerPos) -> Result<Event,Error> {
+    fn pass(&mut self, pos: pos::PlayerPos) -> Result<Event, Error> {
         let state = {
             let auction = try!(self.get_auction_mut());
             try!(auction.pass(pos))
@@ -205,7 +213,7 @@ impl Party {
             bid::AuctionState::Cancelled => {
                 self.add_event(EventType::BidCancelled);
                 self.next_game();
-            },
+            }
             _ => (),
         }
 
@@ -243,7 +251,7 @@ impl Party {
         self.game = Game::Playing(game);
     }
 
-    fn play_card(&mut self, pos: pos::PlayerPos, card: cards::Card) -> Result<Event,Error> {
+    fn play_card(&mut self, pos: pos::PlayerPos, card: cards::Card) -> Result<Event, Error> {
         let result = {
             let game = try!(self.get_game_mut());
             try!(game.play_card(pos, card))
@@ -255,11 +263,13 @@ impl Party {
         match result {
             game::TrickResult::Nothing => (),
             game::TrickResult::TrickOver(winner, game_result) => {
-                self.add_event(EventType::TrickOver{ winner: winner });
+                self.add_event(EventType::TrickOver { winner: winner });
                 match game_result {
                     game::GameResult::Nothing => (),
                     game::GameResult::GameOver{points, winners, scores} => {
-                        for i in 0..2 { self.scores[i] += scores[i]; }
+                        for i in 0..2 {
+                            self.scores[i] += scores[i];
+                        }
                         self.add_event(EventType::GameOver {
                             points: points,
                             winner: winners,
@@ -268,7 +278,7 @@ impl Party {
                         self.next_game();
                     }
                 }
-            },
+            }
         }
 
         Ok(main_event)
@@ -288,24 +298,22 @@ struct PlayerInfo {
 
 // Maps player IDs to PlayerInfo
 struct PlayerList {
-    pub player_map: HashMap<u32,PlayerInfo>,
+    pub player_map: HashMap<u32, PlayerInfo>,
 }
 
 impl PlayerList {
     fn new() -> PlayerList {
-        PlayerList {
-            player_map: HashMap::new(),
-        }
+        PlayerList { player_map: HashMap::new() }
     }
 
-    fn get_player_info(&self, player_id: u32) -> Result<&PlayerInfo,Error> {
+    fn get_player_info(&self, player_id: u32) -> Result<&PlayerInfo, Error> {
         match self.player_map.get(&player_id) {
             None => Err(Error::BadPlayerId),
             Some(info) => {
                 // Update the last active time
                 *info.last_time.lock().unwrap() = time::now();
                 Ok(info)
-            },
+            }
         }
     }
 
@@ -314,7 +322,7 @@ impl PlayerList {
     //       and hope that it won't happen.
     fn make_ids(&self) -> [u32; 4] {
         // Expect self.player_map to be locked
-        let mut result = [0;4];
+        let mut result = [0; 4];
 
         for i in 0..4 {
             loop {
@@ -379,13 +387,13 @@ impl GameManager {
             // println!("PARTEY INCOMING");
             return Ready(info);
         } else {
-            let (promise,future) = Future::pair();
+            let (promise, future) = Future::pair();
             waiters.push(promise);
             return Waiting(future);
         }
     }
 
-    fn make_party(&self, others: Vec<Complete<NewPartyInfo,()>>) -> NewPartyInfo {
+    fn make_party(&self, others: Vec<Complete<NewPartyInfo, ()>>) -> NewPartyInfo {
         let mut list = self.party_list.write().unwrap();
 
         // println!("Making a party now!");
@@ -400,17 +408,18 @@ impl GameManager {
 
         // Prepare the players info
         for i in 0..4 {
-            list.player_map.insert(ids[i], PlayerInfo {
-                party: party.clone(),
-                pos: pos::PlayerPos(i),
-                last_time: Mutex::new(time::now()),
-            });
+            list.player_map.insert(ids[i],
+                                   PlayerInfo {
+                                       party: party.clone(),
+                                       pos: pos::PlayerPos(i),
+                                       last_time: Mutex::new(time::now()),
+                                   });
         }
 
         // Tell everyone. They'll love it.
         // TODO: handle cancelled channels (?)
         // println!("Waking them up!");
-        for (i,promise) in others.into_iter().enumerate() {
+        for (i, promise) in others.into_iter().enumerate() {
             promise.complete(NewPartyInfo {
                 player_id: ids[i],
                 player_pos: pos::PlayerPos(i),
@@ -420,7 +429,7 @@ impl GameManager {
         // println!("Almost ready!");
 
         // Even you, weird 4th dude.
-        NewPartyInfo{
+        NewPartyInfo {
             player_id: ids[3],
             player_pos: pos::P3,
         }
@@ -437,7 +446,10 @@ impl GameManager {
 
     }
 
-    pub fn bid(&self, player_id: u32, (target, trump): (bid::Target, cards::Suit)) -> ManagerResult<Event> {
+    pub fn bid(&self,
+               player_id: u32,
+               (target, trump): (bid::Target, cards::Suit))
+               -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -493,7 +505,7 @@ impl GameManager {
         Ok(trick.clone())
     }
 
-    pub fn see_scores(&self, player_id: u32) -> ManagerResult<[i32;2]> {
+    pub fn see_scores(&self, player_id: u32) -> ManagerResult<[i32; 2]> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
@@ -528,7 +540,8 @@ impl GameManager {
         }
     }
 
-    // Check if the event ID is already available. If not, returns a channel that will produce it one
+    // Check if the event ID is already available.
+    // If not, returns a channel that will produce it one
     // day, so that we don't keep the locks while waiting.
     fn get_wait_result(&self, player_id: u32, event_id: usize) -> ManagerResult<WaitResult> {
         let list = self.party_list.read().unwrap();
@@ -554,4 +567,3 @@ impl GameManager {
         Ok(Waiting(future))
     }
 }
-
