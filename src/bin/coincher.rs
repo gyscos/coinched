@@ -13,7 +13,7 @@ use hyper::client::IntoUrl;
 use std::convert::From;
 use std::io::Read;
 use libcoinche::pos::PlayerPos;
-use hyper::header::{Header, ContentType};
+use hyper::header::ContentType;
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
 
