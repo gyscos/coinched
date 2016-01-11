@@ -68,7 +68,7 @@ impl From<game::PlayError> for Error {
 }
 
 /// Player just joined a new party. He's given a player id, and his position.
-#[derive(RustcEncodable)]
+#[derive(RustcEncodable,RustcDecodable)]
 pub struct NewPartyInfo {
     /// Player ID, used in every request.
     pub player_id: u32,
@@ -132,6 +132,7 @@ impl Party {
     }
 
     fn add_event(&mut self, event: EventType) -> Event {
+        trace!("Adding event: {:?}", event);
         let ev = Event {
             event: event.clone(),
             id: self.events.len(),
@@ -178,6 +179,7 @@ impl Party {
     }
 
     fn cancel(&mut self) {
+        println!("CANCEL");
         self.add_event(EventType::PartyCancelled("player left".to_string()));
     }
 
@@ -186,13 +188,15 @@ impl Party {
            trump: cards::Suit,
            target: bid::Target)
            -> ManagerResult<Event> {
+        trace!("Bid from {:?}: {:?} on {:?}", pos, target, trump);
         let state = {
             let auction = try!(self.get_auction_mut());
             try!(auction.bid(pos, trump, target))
         };
+        trace!("Current state: {:?}", state);
 
-        let main_event = self.add_event(EventType::FromPlayer(pos,
-                                                              PlayerEvent::Bidded(trump, target)));
+        let event = EventType::FromPlayer(pos, PlayerEvent::Bidded(trump, target));
+        let main_event = self.add_event(event);
         match state {
             bid::AuctionState::Over => self.complete_auction(),
             _ => (),
@@ -366,6 +370,7 @@ impl GameManager {
 
     /// Attempts to join a new party. Blocks until a party is available.
     pub fn join(&self) -> ManagerResult<NewPartyInfo> {
+        trace!("Join");
         match self.get_join_result() {
             // TODO: add a timeout (max: 20s)
             // TODO: handle cancelled join?
@@ -415,6 +420,8 @@ impl GameManager {
                                        last_time: Mutex::new(time::now()),
                                    });
         }
+
+        trace!("Party ready: {:?}", ids);
 
         // Tell everyone. They'll love it.
         // TODO: handle cancelled channels (?)
@@ -522,6 +529,8 @@ impl GameManager {
     // TODO: auto-leave players after long inactivity
     pub fn leave(&self, player_id: u32) {
         let mut list = self.party_list.write().unwrap();
+
+        println!("LEAVING {}", player_id);
 
         list.remove(player_id);
     }
