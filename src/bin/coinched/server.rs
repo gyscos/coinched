@@ -1,13 +1,4 @@
-extern crate rustc_serialize;
-extern crate coinched;
-extern crate libcoinche;
-extern crate iron;
-extern crate bodyparser;
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-
-use coinched::GameManager;
+use game_manager::GameManager;
 use coinched::{ContractBody, CardBody};
 
 use std::sync::Arc;
@@ -15,7 +6,8 @@ use std::str::FromStr;
 
 use rustc_serialize::json;
 use iron::prelude::*;
-
+use iron;
+use bodyparser;
 
 struct Router {
     manager: Arc<GameManager>,
@@ -367,13 +359,4 @@ impl Server {
     }
 }
 
-fn main() {
-    // TODO: read this from arguments
-    env_logger::init().unwrap();
 
-    let port = 3000;
-
-    let server = Server::new(port);
-
-    server.run();
-}

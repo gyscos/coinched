@@ -71,6 +71,9 @@ impl rustc_serialize::Decodable for PlayerEvent {
 /// Represents an event that can happen during the game.
 #[derive(Clone,Debug)]
 pub enum EventType {
+    /// Special event indicating the server expects the player to take an action.
+    YourTurn,
+
     /// The party is cancelled. Contains an optional explanation.
     PartyCancelled(String),
 
@@ -136,6 +139,9 @@ impl rustc_serialize::Encodable for EventType {
                     Ok(())
                 })
             }
+            &EventType::YourTurn => {
+                s.emit_struct("Event", 1, |s| encode_field!(s, "type", 0, "YourTurn"))
+            }
             &EventType::BidCancelled => {
                 s.emit_struct("Event", 1, |s| encode_field!(s, "type", 0, "BidCancelled"))
             }
@@ -196,6 +202,7 @@ impl rustc_serialize::Decodable for EventType {
         d.read_struct("PlayerEvent", 0, |d| {
             match try!(d.read_struct_field("type", 0, |d| d.read_str())).as_ref() {
                 "BidCancelled" => Ok(EventType::BidCancelled),
+                "YourTurn" => Ok(EventType::YourTurn),
                 "BidOver" => {
                     let contract = try!(decode_field!(d, "contract", 1));
                     Ok(EventType::BidOver(contract))

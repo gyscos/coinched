@@ -3,15 +3,16 @@
 use rand::{thread_rng, Rng};
 use time;
 
-use std::fmt;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock, Mutex};
-use std::convert::From;
-
-use libcoinche::{bid, cards, pos, game, trick};
-use event::{Event, EventType, PlayerEvent};
 
 use eventual::{Future, Complete, Async};
+
+use libcoinche::{bid, cards, pos, game, trick};
+use coinched::{Event, EventType, PlayerEvent};
+use coinched::NewPartyInfo;
+
+use error::Error;
 
 use self::FutureResult::{Ready, Waiting};
 
@@ -25,56 +26,6 @@ type JoinResult = FutureResult<NewPartyInfo>;
 
 pub type ManagerResult<T> = Result<T, Error>;
 
-/// A possible error.
-pub enum Error {
-    /// The given player ID is not associated with an actual game
-    BadPlayerId,
-    /// The given event ID is not associated with an actual event
-    BadEventId,
-
-    /// Player tried to play a card during auction.
-    PlayInAuction,
-    /// Player tried to bid during card play.
-    BidInGame,
-
-    /// An error occured during bidding.
-    Bid(bid::BidError),
-    /// An error occured during card play.
-    Play(game::PlayError),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Error::BadPlayerId => write!(f, "player not found"),
-            &Error::BadEventId => write!(f, "event not found"),
-            &Error::PlayInAuction => write!(f, "cannot play during auction"),
-            &Error::BidInGame => write!(f, "cannot bid during card play"),
-            &Error::Bid(ref error) => write!(f, "{}", error),
-            &Error::Play(ref error) => write!(f, "{}", error),
-        }
-    }
-}
-
-impl From<bid::BidError> for Error {
-    fn from(err: bid::BidError) -> Error {
-        Error::Bid(err)
-    }
-}
-impl From<game::PlayError> for Error {
-    fn from(err: game::PlayError) -> Error {
-        Error::Play(err)
-    }
-}
-
-/// Player just joined a new party. He's given a player id, and his position.
-#[derive(RustcEncodable,RustcDecodable)]
-pub struct NewPartyInfo {
-    /// Player ID, used in every request.
-    pub player_id: u32,
-    /// Player position in the table.
-    pub player_pos: pos::PlayerPos,
-}
 
 /// Base class for managing matchmaking.
 ///
@@ -92,6 +43,15 @@ pub enum Game {
     Bidding(bid::Auction),
     /// The game is in the main playing phase
     Playing(game::GameState),
+}
+
+impl Game {
+    fn next_player(&self) -> pos::PlayerPos {
+        match self {
+            &Game::Bidding(ref auction) => auction.next_player(),
+            &Game::Playing(ref game) => game.next_player(),
+        }
+    }
 }
 
 // Creates a new game, starting with an auction.
@@ -572,6 +532,14 @@ impl GameManager {
         }
 
         // Ok, so we'll have to wait a bit.
+        // ... maybe?
+        if info.pos == party.game.next_player() {
+            // If we're actually waiting for this guy, tell him!
+            return Ok(Ready(Event {
+                event: EventType::YourTurn,
+                id: event_id - 1,
+            }));
+        }
 
         let (promise, future) = Future::pair();
         party.observers.lock().unwrap().push(promise);
