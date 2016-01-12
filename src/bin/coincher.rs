@@ -39,7 +39,6 @@ fn from_reader<R: Read, T: Decodable>(r: &mut R) -> Result<T, Error> {
 
 impl Drop for Client {
     fn drop(&mut self) {
-        println!("LEAVING");
         let leave_url = format!("http://{}/leave/{}", self.host, self.player_id);
         hyper::Client::new().post(&leave_url).send().unwrap();
     }
@@ -61,6 +60,7 @@ impl Client {
         let client = hyper::Client::new();
 
         let join_url = try!(format!("http://{}/join", host).into_url());
+        println!("Connecting to {}", host);
         let mut response = try!(client.post(join_url).send());
         let party: coinched::NewPartyInfo = try!(from_reader(&mut response));
 
@@ -145,7 +145,7 @@ fn play_game<F: FnMut() -> String>(client: &mut Client,
                                    first: PlayerPos,
                                    hand: libcoinche::cards::Hand,
                                    mut input: F)
-                                   -> [i32; 2] {
+                                   -> Option<[i32; 2]> {
     print!("Cards:\n[");
     for card in hand.list() {
         print!(" {}", card.to_string());
@@ -157,39 +157,45 @@ fn play_game<F: FnMut() -> String>(client: &mut Client,
     loop {
         let event = if next == client.pos {
             // Our turn
-            print!("Bid? Write `pass` or `[80, 90, ... , Capot] [H,C,D,S]` or `coinche`.\n> ");
+            println!("Your turn to bid. Commands:");
+            println!("* `leave`");
+            println!("* `pass`");
+            println!("* `coinche`");
+            println!("* [80, 90, ... , Capot] [H,C,D,S]");
+            print!("> ");
             io::stdout().flush().unwrap();
             let line = input();
-            if &line == "pass" {
-                client.pass()
-            } else if &line == "coinche" {
-                client.coinche()
-            } else {
-                let tokens: Vec<&str> = line.trim().split(" ").collect();
-                if tokens.len() != 2 {
-                    println!("Invalid number of tokens");
-                    continue;
-                }
-                let target = match libcoinche::bid::Target::from_str(tokens[0]) {
-                    Ok(target) => target,
-                    _ => {
-                        println!("Invalid target");
+            match line.as_ref() {
+                "leave" => return None,
+                "pass" => client.pass(),
+                "coinche" => client.coinche(),
+                line => {
+                    let tokens: Vec<&str> = line.trim().split(" ").collect();
+                    if tokens.len() != 2 {
+                        println!("Invalid number of tokens");
                         continue;
                     }
-                };
-                let suit = match libcoinche::cards::Suit::from_str(tokens[1]) {
-                    Ok(suit) => suit,
-                    Err(err) => {
-                        println!("Invalid suit: {}", err);
-                        continue;
-                    }
-                };
+                    let target = match libcoinche::bid::Target::from_str(tokens[0]) {
+                        Ok(target) => target,
+                        _ => {
+                            println!("Invalid target");
+                            continue;
+                        }
+                    };
+                    let suit = match libcoinche::cards::Suit::from_str(tokens[1]) {
+                        Ok(suit) => suit,
+                        Err(err) => {
+                            println!("Invalid suit: {}", err);
+                            continue;
+                        }
+                    };
 
-                let contract = coinched::ContractBody {
-                    target: target,
-                    suit: suit,
-                };
-                client.bid(contract)
+                    let contract = coinched::ContractBody {
+                        target: target,
+                        suit: suit,
+                    };
+                    client.bid(contract)
+                }
             }
         } else {
             client.wait()
@@ -207,7 +213,10 @@ fn play_game<F: FnMut() -> String>(client: &mut Client,
                     _ => (),
                 }
             }
-            Ok(coinched::EventType::PartyCancelled(msg)) => panic!("party cancelled: {}", msg),
+            Ok(coinched::EventType::PartyCancelled(msg)) => {
+                println!("party cancelled: {}", msg);
+                return None;
+            },
             Ok(_) => (),
             Err(err) => println!("Error: {:?}", err),
         }
@@ -234,7 +243,10 @@ fn main() {
         let event = client.wait().unwrap();
         match event {
             coinched::EventType::NewGameRelative{first, hand} => {
-                let new_scores = play_game(&mut client, first, hand, &mut read_line);
+                let new_scores = match play_game(&mut client, first, hand, &mut read_line) {
+                    Some(scores) => scores,
+                    None => return,
+                };
                 score[0] += new_scores[0];
                 score[1] += new_scores[1];
             }

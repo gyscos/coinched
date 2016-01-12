@@ -291,7 +291,7 @@ impl iron::Handler for Router {
                     "leave" => {
                         check_len!(req.url.path, 2);
                         let player_id = parse_id!("player", &*req.url.path[1]);
-                        self.manager.leave(player_id);
+                        my_try!(self.manager.leave(player_id));
                         // Result is a string - but who cares?
                         r#""ok""#.to_string()
                     }

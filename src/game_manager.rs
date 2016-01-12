@@ -178,9 +178,8 @@ impl Party {
         self.add_event(event);
     }
 
-    fn cancel(&mut self) {
-        println!("CANCEL");
-        self.add_event(EventType::PartyCancelled("player left".to_string()));
+    fn cancel(&mut self, msg: String) {
+        self.add_event(EventType::PartyCancelled(msg));
     }
 
     fn bid(&mut self,
@@ -333,7 +332,6 @@ impl PlayerList {
                 let id = thread_rng().next_u32();
                 // println!("New UUID: {}", id);
                 if self.player_map.contains_key(&id) {
-                    // println!("Damnation!");
                     continue;
                 }
                 let mut ok = true;
@@ -353,9 +351,15 @@ impl PlayerList {
         result
     }
 
-    fn remove(&mut self, player_id: u32) {
-        self.player_map.get(&player_id).unwrap().party.write().unwrap().cancel();
+    fn remove(&mut self, player_id: u32) -> Result<(),Error> {
+        {
+            let info = try!(self.get_player_info(player_id));
+            let pos = info.pos;
+            info.party.write().unwrap() .cancel(format!("player left: {}", pos.0));
+        }
         self.player_map.remove(&player_id);
+
+        Ok(())
     }
 }
 
@@ -389,7 +393,6 @@ impl GameManager {
                waiters.pop().unwrap(),
                waiters.pop().unwrap(),
             ]);
-            // println!("PARTEY INCOMING");
             return Ready(info);
         } else {
             let (promise, future) = Future::pair();
@@ -400,8 +403,6 @@ impl GameManager {
 
     fn make_party(&self, others: Vec<Complete<NewPartyInfo, ()>>) -> NewPartyInfo {
         let mut list = self.party_list.write().unwrap();
-
-        // println!("Making a party now!");
 
         // Generate 4 new IDS
         let ids = list.make_ids();
@@ -527,12 +528,14 @@ impl GameManager {
     }
 
     // TODO: auto-leave players after long inactivity
-    pub fn leave(&self, player_id: u32) {
+    pub fn leave(&self, player_id: u32) -> ManagerResult<()> {
         let mut list = self.party_list.write().unwrap();
 
-        println!("LEAVING {}", player_id);
+        trace!("Player leaving: {}", player_id);
 
-        list.remove(player_id);
+        try!(list.remove(player_id));
+
+        Ok(())
     }
 
     // Waits until the given event_id happens
