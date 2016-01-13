@@ -3,6 +3,10 @@ extern crate time;
 extern crate rustc_serialize;
 extern crate eventual;
 extern crate libcoinche;
+extern crate iron;
+extern crate url;
+extern crate hyper;
+extern crate bodyparser;
 
 #[macro_use]
 extern crate log;
@@ -21,6 +25,8 @@ macro_rules! encode_field {
 }
 
 mod event;
+pub mod client;
+pub mod server;
 
 pub use event::*;
 

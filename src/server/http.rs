@@ -1,5 +1,5 @@
-use game_manager::GameManager;
-use coinched::{ContractBody, CardBody};
+use super::game_manager::GameManager;
+use {ContractBody, CardBody};
 
 use std::sync::Arc;
 use std::str::FromStr;
@@ -310,7 +310,7 @@ impl iron::Handler for Router {
                                                   "contract");
                         trace!("Bidding {:?}", contract);
                         // Result is an event
-                        try_manager!(self.manager.bid(player_id, (contract.target, contract.suit)))
+                        try_manager!(self.manager.bid(player_id, contract))
                     }
                     "play" => {
                         check_len!(req.url.path, 2);
@@ -319,7 +319,7 @@ impl iron::Handler for Router {
                         let card = read_body!(req.get::<bodyparser::Struct<CardBody>>(), "card");
 
                         // Result is an event
-                        try_manager!(self.manager.play_card(player_id, card.card))
+                        try_manager!(self.manager.play_card(player_id, card))
                     }
                     _ => {
                         trace!("Requesting invalid path: POST {:?}", &req.url.path);

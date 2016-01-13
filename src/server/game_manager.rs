@@ -9,10 +9,10 @@ use std::sync::{Arc, RwLock, Mutex};
 use eventual::{Future, Complete, Async};
 
 use libcoinche::{bid, cards, pos, game, trick};
-use coinched::{Event, EventType, PlayerEvent};
-use coinched::NewPartyInfo;
+use {Event, EventType, PlayerEvent};
+use {NewPartyInfo, ContractBody, CardBody};
 
-use error::Error;
+use super::error::Error;
 
 use self::FutureResult::{Ready, Waiting};
 
@@ -404,25 +404,24 @@ impl GameManager {
     }
 
     // Play a card in the current game
-    pub fn play_card(&self, player_id: u32, card: cards::Card) -> ManagerResult<Event> {
+    pub fn play_card(&self, player_id: u32, card: CardBody) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
 
         let mut party = info.party.write().unwrap();
-        party.play_card(info.pos, card)
+        party.play_card(info.pos, card.card)
 
     }
 
     pub fn bid(&self,
                player_id: u32,
-               (target, trump): (bid::Target, cards::Suit))
-               -> ManagerResult<Event> {
+               contract: ContractBody) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 
         let mut party = info.party.write().unwrap();
-        party.bid(info.pos, trump, target)
+        party.bid(info.pos, contract.suit, contract.target)
     }
 
     pub fn pass(&self, player_id: u32) -> ManagerResult<Event> {
