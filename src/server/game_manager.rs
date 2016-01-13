@@ -311,11 +311,11 @@ impl PlayerList {
         result
     }
 
-    fn remove(&mut self, player_id: u32) -> Result<(),Error> {
+    fn remove(&mut self, player_id: u32) -> Result<(), Error> {
         {
             let info = try!(self.get_player_info(player_id));
             let pos = info.pos;
-            info.party.write().unwrap() .cancel(format!("player left: {}", pos.0));
+            info.party.write().unwrap().cancel(format!("player left: {}", pos.0));
         }
         self.player_map.remove(&player_id);
 
@@ -414,9 +414,7 @@ impl GameManager {
 
     }
 
-    pub fn bid(&self,
-               player_id: u32,
-               contract: ContractBody) -> ManagerResult<Event> {
+    pub fn bid(&self, player_id: u32, contract: ContractBody) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
         let info = try!(list.get_player_info(player_id));
 

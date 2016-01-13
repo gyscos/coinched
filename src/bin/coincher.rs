@@ -5,7 +5,7 @@ use std::io;
 use std::io::{BufRead, Write};
 use std::str::FromStr;
 use libcoinche::{bid, cards, pos};
-use coinched::{EventType};
+use coinched::EventType;
 use coinched::client;
 
 #[derive(Clone)]
@@ -48,8 +48,7 @@ impl client::Frontend<client::http::HttpBackend> for CliFrontend {
     }
 }
 
-impl client::GameFrontend<client::http::HttpBackend> for CliFrontend {
-}
+impl client::GameFrontend<client::http::HttpBackend> for CliFrontend {}
 
 impl client::AuctionFrontend<client::http::HttpBackend> for CliFrontend {
     type Game = CliFrontend;
@@ -63,7 +62,10 @@ impl client::AuctionFrontend<client::http::HttpBackend> for CliFrontend {
     }
 
     fn show_bid(&mut self, pos: pos::PlayerPos, suit: cards::Suit, target: bid::Target) {
-        println!("Player {:?} bid {} on {}", pos, target.to_string(), suit.to_string());
+        println!("Player {:?} bid {} on {}",
+                 pos,
+                 target.to_string(),
+                 suit.to_string());
     }
 
     fn ask_action(&mut self) -> client::AuctionAction {
@@ -89,7 +91,7 @@ impl client::AuctionFrontend<client::http::HttpBackend> for CliFrontend {
                         Err(msg) => {
                             println!("{}", msg);
                             continue;
-                        },
+                        }
                         Ok(contract) => contract,
                     };
 

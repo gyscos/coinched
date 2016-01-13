@@ -22,11 +22,9 @@ pub struct HttpBackend {
 
     event_id: usize,
 
-    host: String,
-
-    // It used to include a re-usable hyper::Client,
-    // but it would lead to failed request if too
-    // long happened between two queries.
+    host: String, /* It used to include a re-usable hyper::Client,
+                   * but it would lead to failed request if too
+                   * long happened between two queries. */
 }
 
 #[derive(Debug)]

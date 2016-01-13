@@ -9,12 +9,10 @@ version = "0.0.1"
 [[bin]]
 doc = false
 name = "coinched"
-path = "src/bin/coinched/main.rs"
 
 [[bin]]
 doc = false
 name = "coincher"
-path = "src/bin/coincher/main.rs"
 
 [dependencies]
 bodyparser = "0.0.6"
