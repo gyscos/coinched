@@ -25,9 +25,8 @@ fn parse_bid(line: &str) -> Result<(cards::Suit, bid::Target), String> {
 
 impl CliFrontend {
     fn input() -> String {
-        let mut stdin_reader = io::BufReader::new(io::stdin());
         let mut buffer = String::new();
-        stdin_reader.read_line(&mut buffer).unwrap();
+        io::stdin().read_line(&mut buffer).unwrap();
         // Discard the `\n` at the end
         buffer.pop().unwrap();
         buffer
