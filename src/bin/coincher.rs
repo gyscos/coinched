@@ -8,8 +8,10 @@ use libcoinche::{bid, cards, pos};
 use coinched::EventType;
 use coinched::client;
 
-#[derive(Clone)]
-struct CliFrontend;
+struct CliFrontend {
+    hand: cards::Hand,
+    pos: pos::PlayerPos,
+}
 
 fn parse_bid(line: &str) -> Result<(cards::Suit, bid::Target), String> {
     let tokens: Vec<&str> = line.trim().split(" ").collect();
@@ -24,12 +26,34 @@ fn parse_bid(line: &str) -> Result<(cards::Suit, bid::Target), String> {
 }
 
 impl CliFrontend {
+    fn new(pos: pos::PlayerPos) -> Self {
+        CliFrontend {
+            pos: pos,
+            hand: cards::Hand::new(),
+        }
+    }
+
     fn input() -> String {
         let mut buffer = String::new();
         io::stdin().read_line(&mut buffer).unwrap();
         // Discard the `\n` at the end
         buffer.pop().unwrap();
         buffer
+    }
+
+    fn print_hand(&self) {
+        print!("Cards: [");
+        let cards = self.hand.list();
+        let len = cards.len();
+        for card in cards {
+            print!(" {}", card.to_string());
+        }
+        println!(" ]");
+        print!("        ");
+        for i in 0..len {
+            print!("  {}", i);
+        }
+        println!("");
     }
 }
 
@@ -42,15 +66,46 @@ impl client::Frontend<client::http::HttpBackend> for CliFrontend {
         println!("Unexpected event: {:?}", event);
     }
 
-    fn party_cancelled(self, msg: String) {
+    fn party_cancelled(&mut self, msg: &str) {
         println!("Party cancelled: {}", msg);
     }
-}
 
-impl client::GameFrontend<client::http::HttpBackend> for CliFrontend {}
+    fn show_card_played(&mut self, pos: pos::PlayerPos, card: cards::Card) {
+        println!("Player {:?} played {}", pos, card.to_string());
+        if pos == self.pos {
+            self.hand.remove(card);
+        }
+    }
 
-impl client::AuctionFrontend<client::http::HttpBackend> for CliFrontend {
-    type Game = CliFrontend;
+    fn show_trick_over(&mut self, winner: pos::PlayerPos) {
+        println!("{:?} gets the trick.", winner);
+    }
+
+    fn ask_card(&mut self) -> client::GameAction {
+        let cards = self.hand.list();
+
+        loop {
+            self.print_hand();
+            print!("What card do you play?\n> ");
+            io::stdout().flush().unwrap();
+
+            let line = Self::input();
+
+            if line == "leave" {
+                return client::GameAction::Leave;
+            } else {
+                match usize::from_str(&line) {
+                    Ok(i) if i < cards.len() => return client::GameAction::PlayCard(cards[i]),
+                    _ => println!("Invalid input."),
+                }
+            }
+        }
+    }
+
+    fn game_over(&mut self, points: [i32; 2], winner: pos::Team, scores: [i32; 2]) {
+        println!("Game over!");
+        println!("{:?} won. Points were {:?} ; scores: {:?}", winner, points, scores);
+    }
 
     fn show_pass(&mut self, pos: pos::PlayerPos) {
         println!("Player {:?} passed", pos);
@@ -67,7 +122,7 @@ impl client::AuctionFrontend<client::http::HttpBackend> for CliFrontend {
                  suit.to_string());
     }
 
-    fn ask_action(&mut self) -> client::AuctionAction {
+    fn ask_bid(&mut self) -> client::AuctionAction {
         loop {
             println!("Your turn to bid. Commands:");
             println!("* `leave`");
@@ -101,30 +156,22 @@ impl client::AuctionFrontend<client::http::HttpBackend> for CliFrontend {
     }
 
     /// Auction cancelled, back to the start.
-    fn auction_cancelled(self) {
+    fn auction_cancelled(&mut self) {
         println!("Auction cancelled!");
     }
 
     /// Auction is complete, we can play now!
-    fn auction_over(self, contract: &bid::Contract) -> Self::Game {
+    fn auction_over(&mut self, contract: &bid::Contract) {
         println!("Auction is over: {:?}", contract);
-        self
     }
-}
 
-impl client::MainFrontend<client::http::HttpBackend> for CliFrontend {
-    type Auction = CliFrontend;
+    fn start_game(&mut self, first: pos::PlayerPos, hand: cards::Hand) {
+        self.hand = hand;
 
-    fn start_game(&mut self, first: pos::PlayerPos, hand: cards::Hand) -> Self::Auction {
-        print!("Cards:\n[");
-        for card in hand.list() {
-            print!(" {}", card.to_string());
-        }
-        println!(" ]");
+        self.print_hand();
+
 
         println!("First player: {:?}", first);
-
-        self.clone()
     }
 }
 
@@ -135,7 +182,7 @@ fn main() {
     // TODO: allow reconnecting to an existing game
 
     let backend = client::http::HttpBackend::join(host).unwrap();
-    let frontend = CliFrontend;
+    let mut frontend = CliFrontend::new(backend.pos);
 
-    println!("{:?}", client::Client::new(backend, frontend).run());
+    println!("Final score: {:?}", client::Client::new(backend).run(&mut frontend));
 }

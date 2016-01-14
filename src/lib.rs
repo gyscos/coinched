@@ -33,12 +33,17 @@ pub use event::*;
 // Structures written by the server, read by the client
 
 /// Player just joined a new party. He's given a player id, and his position.
-#[derive(RustcEncodable,RustcDecodable)]
+#[derive(Clone,Debug,RustcEncodable,RustcDecodable)]
 pub struct NewPartyInfo {
     /// Player ID, used in every request.
     pub player_id: u32,
     /// Player position in the table.
     pub player_pos: libcoinche::pos::PlayerPos,
+}
+
+#[derive(Clone,Debug,RustcEncodable,RustcDecodable)]
+pub struct Error {
+    pub error: String,
 }
 
 

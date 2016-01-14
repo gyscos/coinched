@@ -32,6 +32,7 @@ pub enum Error {
     Url(url::ParseError),
     Hyper(hyper::Error),
     Json(json::DecoderError),
+    Coinched(::Error),
 }
 
 impl From<url::ParseError> for Error {
@@ -63,10 +64,21 @@ impl From<json::DecoderError> for Error {
 /// (`json::decode` only works from a string)
 fn from_reader<R: Read, T: Decodable>(r: &mut R) -> Result<T, Error> {
     let json = try!(json::Json::from_reader(r));
-    // println!("Json: {:?}", json);
-    let mut decoder = json::Decoder::new(json);
-    let result = try!(Decodable::decode(&mut decoder));
-    Ok(result)
+
+    let has_error = match json.as_object() {
+        Some(obj) => obj.contains_key("error"),
+        _ => false,
+    };
+
+    if has_error {
+        let mut decoder = json::Decoder::new(json);
+        let err = try!(Decodable::decode(&mut decoder));
+        Err(Error::Coinched(err))
+    } else {
+        let mut decoder = json::Decoder::new(json);
+        let result = try!(Decodable::decode(&mut decoder));
+        Ok(result)
+    }
 }
 
 /// Leave the party on drop.

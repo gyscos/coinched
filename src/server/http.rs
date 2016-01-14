@@ -1,5 +1,5 @@
 use super::game_manager::GameManager;
-use {ContractBody, CardBody};
+use {ContractBody, CardBody, Error};
 
 use std::sync::Arc;
 use std::str::FromStr;
@@ -107,17 +107,12 @@ fn help_resp() -> IronResult<Response> {
     return Ok(Response::with((content_type, iron::status::NotFound, help_message())));
 }
 
-fn err_resp(msg: &str) -> IronResult<Response> {
+fn err_resp<S: ToString>(msg: S) -> IronResult<Response> {
     let content_type: iron::mime::Mime = "application/json".parse::<iron::mime::Mime>().unwrap();
-
-    #[derive(RustcEncodable)]
-    struct Error<'a> {
-        error: &'a str,
-    }
 
     return Ok(Response::with((content_type,
                               iron::status::Ok,
-                              json::encode(&Error { error: msg }).unwrap())));
+                              json::encode(&Error { error: msg.to_string() }).unwrap())));
 }
 
 macro_rules! parse_id {
@@ -125,7 +120,7 @@ macro_rules! parse_id {
         {
             match u32::from_str($value) {
                 Ok(id) => id,
-                Err(e) => return err_resp(&format!("invalid {} ID: `{}` ({})", $name, $value, e)),
+                Err(e) => return err_resp(format!("invalid {} ID: `{}` ({})", $name, $value, e)),
             }
         }
     };
@@ -135,21 +130,21 @@ macro_rules! check_len {
     ( $path:expr, 1 ) => {
         {
             if $path.len() != 1 {
-                return err_resp(&format!("incorrect parameters (Usage: /{})", $path[0]));
+                return err_resp(format!("incorrect parameters (Usage: /{})", $path[0]));
             }
         }
     };
     ( $path:expr, 2 ) => {
         {
             if $path.len() != 2 {
-                return err_resp(&format!("incorrect parameters (Usage: /{}/[PID])", $path[0]));
+                return err_resp(format!("incorrect parameters (Usage: /{}/[PID])", $path[0]));
             }
         }
     };
     ( $path:expr, 3 ) => {
         {
             if $path.len() != 3 {
-                return err_resp(&format!(
+                return err_resp(format!(
                         "incorrect parameters (Usage: /{}/[PID]/[EID])",
                         $path[0]));
             }
@@ -162,7 +157,7 @@ macro_rules! my_try {
 
         {
             match $x {
-                Err(err) => return err_resp(&format!("{}", err)),
+                Err(err) => return err_resp(format!("{}", err)),
                 Ok(thing) => thing,
             }
         }
@@ -180,8 +175,8 @@ macro_rules! read_body {
         {
             match $x {
                 Ok(Some(thing)) => thing,
-                Ok(None) => return err_resp(&format!("body expected: {}", $name)),
-                Err(err) => return err_resp(&format!("Error parsing {}: {:?}", $name, err)),
+                Ok(None) => return err_resp(format!("body expected: {}", $name)),
+                Err(err) => return err_resp(format!("Error parsing {}: {:?}", $name, err)),
             }
         }
     };
