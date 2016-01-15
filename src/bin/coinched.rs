@@ -1,13 +1,37 @@
 extern crate coinched;
+extern crate clap;
+extern crate env_logger;
 #[macro_use]
 extern crate log;
-extern crate env_logger;
+
+use std::str::FromStr;
+use clap::{Arg, App};
 
 fn main() {
-    // TODO: read this from arguments
     env_logger::init().unwrap();
 
-    let port = 3000;
+    let matches = App::new("coinched")
+                      .version("0.1.0")
+                      .author("Alexandre Bury <alexandre.bury@gmail.com>")
+                      .about("A coinche server")
+                      .arg(Arg::with_name("PORT")
+                               .help("Port to listen to (defaults to 3000)")
+                               .short("p")
+                               .long("port")
+                               .takes_value(true))
+                      .get_matches();
+
+    let port = if let Some(port) = matches.value_of("PORT") {
+        match u16::from_str(port) {
+            Ok(port) => port,
+            Err(err) => {
+                println!("Invalid port: `{}` ({})", port, err);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        3000
+    };
 
     let server = coinched::server::http::Server::new(port);
 
