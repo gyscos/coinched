@@ -11,7 +11,7 @@ fn main() {
     env_logger::init().unwrap();
 
     let matches = App::new("coinched")
-                      .version("0.1.0")
+                      .version(env!("CARGO_PKG_VERSION"))
                       .author("Alexandre Bury <alexandre.bury@gmail.com>")
                       .about("A coinche server")
                       .arg(Arg::with_name("PORT")

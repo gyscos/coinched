@@ -182,7 +182,7 @@ impl client::Frontend<client::http::HttpBackend> for CliFrontend {
 
 fn main() {
     let matches = App::new("coincher")
-                      .version("0.1.0")
+                      .version(env!("CARGO_PKG_VERSION"))
                       .author("Alexandre Bury <alexandre.bury@gmail.com>")
                       .about("A client for coinched")
                       .arg(Arg::with_name("HOST")
