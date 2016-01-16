@@ -12,7 +12,13 @@ coinche, and presents it as a network service, for example as a HTTP interface.
 To run the default HTTP server:
 
 ```
-cargo run --bin coinched
+cargo run --bin coinched -- --port 3000
+```
+
+To run the proof-of-concept HTTP client:
+
+```
+cargo run --bin coincher -- localhost:3000
 ```
 
 Note: `coinched` currently requires rust>=1.6, which won't be stable until

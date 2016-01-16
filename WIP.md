@@ -1,13 +1,14 @@
 Currently working on:
 
 * Rust CLI UI
-  * Deserialization for messages
+  * Better card play view
 
 TODO:
 
-* Debug admin console for backend
+* Proper http API description
+* Debug admin console for backend (CLI from the server? Or local http interface?)
 * HTML5 UI
-* Wait event range
+* Wait event range/batch
 * Canceled JOIN requests in API
 * Handle Timeouts in API
-* AI
+* AI (in the client? server?)
