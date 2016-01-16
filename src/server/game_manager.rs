@@ -315,7 +315,7 @@ impl PlayerList {
         {
             let info = try!(self.get_player_info(player_id));
             let pos = info.pos;
-            info.party.write().unwrap().cancel(format!("player left: {}", pos.0));
+            info.party.write().unwrap().cancel(format!("player left: {}", pos as usize));
         }
         self.player_map.remove(&player_id);
 
@@ -369,7 +369,7 @@ impl GameManager {
 
         // println!("IDS: {:?}", ids);
 
-        let party = Arc::new(RwLock::new(Party::new(pos::P0)));
+        let party = Arc::new(RwLock::new(Party::new(pos::PlayerPos::P0)));
         // Kickstart it with a new game!
 
         // Prepare the players info
@@ -377,7 +377,7 @@ impl GameManager {
             list.player_map.insert(ids[i],
                                    PlayerInfo {
                                        party: party.clone(),
-                                       pos: pos::PlayerPos(i),
+                                       pos: pos::PlayerPos::from_n(i),
                                        last_time: Mutex::new(time::now()),
                                    });
         }
@@ -390,7 +390,7 @@ impl GameManager {
         for (i, promise) in others.into_iter().enumerate() {
             promise.complete(NewPartyInfo {
                 player_id: ids[i],
-                player_pos: pos::PlayerPos(i),
+                player_pos: pos::PlayerPos::from_n(i),
             });
         }
 
@@ -399,7 +399,7 @@ impl GameManager {
         // Even you, weird 4th dude.
         NewPartyInfo {
             player_id: ids[3],
-            player_pos: pos::P3,
+            player_pos: pos::PlayerPos::P3,
         }
     }
 
@@ -448,7 +448,7 @@ impl GameManager {
             Game::Playing(ref game) => game.hands(),
         };
 
-        Ok(hands[info.pos.0])
+        Ok(hands[info.pos as usize])
     }
 
     pub fn see_trick(&self, player_id: u32) -> ManagerResult<trick::Trick> {
