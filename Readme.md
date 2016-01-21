@@ -20,6 +20,3 @@ To run the proof-of-concept HTTP client:
 ```
 cargo run --bin coincher -- localhost:3000
 ```
-
-Note: `coinched` currently requires rust>=1.6, which won't be stable until
-January 20. Until then, use rust beta or nightly.
