@@ -4,13 +4,13 @@ use rand::{thread_rng, Rng};
 use time;
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
-use eventual::{Future, Complete, Async};
+use eventual::{Async, Complete, Future};
 
-use libcoinche::{bid, cards, pos, game, trick};
+use libcoinche::{bid, cards, game, pos, trick};
+use {CardBody, ContractBody, NewPartyInfo};
 use {Event, EventType, PlayerEvent};
-use {NewPartyInfo, ContractBody, CardBody};
 
 use super::error::Error;
 
@@ -25,7 +25,6 @@ type WaitResult = FutureResult<Event>;
 type JoinResult = FutureResult<NewPartyInfo>;
 
 pub type ManagerResult<T> = Result<T, Error>;
-
 
 /// Base class for managing matchmaking.
 ///
@@ -142,15 +141,16 @@ impl Party {
         self.add_event(EventType::PartyCancelled(msg));
     }
 
-    fn bid(&mut self,
-           pos: pos::PlayerPos,
-           trump: cards::Suit,
-           target: bid::Target)
-           -> ManagerResult<Event> {
+    fn bid(
+        &mut self,
+        pos: pos::PlayerPos,
+        trump: cards::Suit,
+        target: bid::Target,
+    ) -> ManagerResult<Event> {
         trace!("Bid from {:?}: {:?} on {:?}", pos, target, trump);
         let state = {
-            let auction = try!(self.get_auction_mut());
-            try!(auction.bid(pos, trump, target))
+            let auction = self.get_auction_mut()?;
+            auction.bid(pos, trump, target)?
         };
         trace!("Current state: {:?}", state);
 
@@ -166,8 +166,8 @@ impl Party {
 
     fn pass(&mut self, pos: pos::PlayerPos) -> Result<Event, Error> {
         let state = {
-            let auction = try!(self.get_auction_mut());
-            try!(auction.pass(pos))
+            let auction = self.get_auction_mut()?;
+            auction.pass(pos)?
         };
 
         let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::Passed));
@@ -185,8 +185,8 @@ impl Party {
 
     fn coinche(&mut self, pos: pos::PlayerPos) -> Result<Event, Error> {
         let state = {
-            let auction = try!(self.get_auction_mut());
-            try!(auction.coinche(pos))
+            let auction = self.get_auction_mut()?;
+            auction.coinche(pos)?
         };
 
         let main_event = self.add_event(EventType::FromPlayer(pos, PlayerEvent::Coinched));
@@ -201,12 +201,10 @@ impl Party {
     fn complete_auction(&mut self) {
         let game = match &mut self.game {
             &mut Game::Playing(_) => unreachable!(),
-            &mut Game::Bidding(ref mut auction) => {
-                match auction.complete() {
-                    Ok(game) => game,
-                    Err(err) => panic!(err),
-                }
-            }
+            &mut Game::Bidding(ref mut auction) => match auction.complete() {
+                Ok(game) => game,
+                Err(err) => panic!(err),
+            },
         };
 
         self.add_event(EventType::BidOver(game.contract().clone()));
@@ -216,8 +214,8 @@ impl Party {
 
     fn play_card(&mut self, pos: pos::PlayerPos, card: cards::Card) -> Result<Event, Error> {
         let result = {
-            let game = try!(self.get_game_mut());
-            try!(game.play_card(pos, card))
+            let game = self.get_game_mut()?;
+            game.play_card(pos, card)?
         };
 
         // This is the main event we want to send.
@@ -229,7 +227,11 @@ impl Party {
                 self.add_event(EventType::TrickOver { winner: winner });
                 match game_result {
                     game::GameResult::Nothing => (),
-                    game::GameResult::GameOver{points, winners, scores} => {
+                    game::GameResult::GameOver {
+                        points,
+                        winners,
+                        scores,
+                    } => {
                         for i in 0..2 {
                             self.scores[i] += scores[i];
                         }
@@ -266,7 +268,9 @@ struct PlayerList {
 
 impl PlayerList {
     fn new() -> PlayerList {
-        PlayerList { player_map: HashMap::new() }
+        PlayerList {
+            player_map: HashMap::new(),
+        }
     }
 
     fn get_player_info(&self, player_id: u32) -> Result<&PlayerInfo, Error> {
@@ -313,16 +317,18 @@ impl PlayerList {
 
     fn remove(&mut self, player_id: u32) -> Result<(), Error> {
         {
-            let info = try!(self.get_player_info(player_id));
+            let info = self.get_player_info(player_id)?;
             let pos = info.pos;
-            info.party.write().unwrap().cancel(format!("player left: {}", pos as usize));
+            info.party
+                .write()
+                .unwrap()
+                .cancel(format!("player left: {}", pos as usize));
         }
         self.player_map.remove(&player_id);
 
         Ok(())
     }
 }
-
 
 impl GameManager {
     pub fn new() -> GameManager {
@@ -349,9 +355,9 @@ impl GameManager {
         if waiters.len() >= 3 {
             // It's a PARTEY!
             let info = self.make_party(vec![
-               waiters.pop().unwrap(),
-               waiters.pop().unwrap(),
-               waiters.pop().unwrap(),
+                waiters.pop().unwrap(),
+                waiters.pop().unwrap(),
+                waiters.pop().unwrap(),
             ]);
             return Ready(info);
         } else {
@@ -374,12 +380,14 @@ impl GameManager {
 
         // Prepare the players info
         for i in 0..4 {
-            list.player_map.insert(ids[i],
-                                   PlayerInfo {
-                                       party: party.clone(),
-                                       pos: pos::PlayerPos::from_n(i),
-                                       last_time: Mutex::new(time::now()),
-                                   });
+            list.player_map.insert(
+                ids[i],
+                PlayerInfo {
+                    party: party.clone(),
+                    pos: pos::PlayerPos::from_n(i),
+                    last_time: Mutex::new(time::now()),
+                },
+            );
         }
 
         trace!("Party ready: {:?}", ids);
@@ -406,17 +414,15 @@ impl GameManager {
     // Play a card in the current game
     pub fn play_card(&self, player_id: u32, card: CardBody) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
-
+        let info = list.get_player_info(player_id)?;
 
         let mut party = info.party.write().unwrap();
         party.play_card(info.pos, card.card)
-
     }
 
     pub fn bid(&self, player_id: u32, contract: ContractBody) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
+        let info = list.get_player_info(player_id)?;
 
         let mut party = info.party.write().unwrap();
         party.bid(info.pos, contract.suit, contract.target)
@@ -424,7 +430,7 @@ impl GameManager {
 
     pub fn pass(&self, player_id: u32) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
+        let info = list.get_player_info(player_id)?;
 
         let mut party = info.party.write().unwrap();
         party.pass(info.pos)
@@ -432,7 +438,7 @@ impl GameManager {
 
     pub fn coinche(&self, player_id: u32) -> ManagerResult<Event> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
+        let info = list.get_player_info(player_id)?;
 
         let mut party = info.party.write().unwrap();
         party.coinche(info.pos)
@@ -440,7 +446,7 @@ impl GameManager {
 
     pub fn see_hand(&self, player_id: u32) -> ManagerResult<cards::Hand> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
+        let info = list.get_player_info(player_id)?;
 
         let party = info.party.read().unwrap();
         let hands = match party.game {
@@ -453,26 +459,26 @@ impl GameManager {
 
     pub fn see_trick(&self, player_id: u32) -> ManagerResult<trick::Trick> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
+        let info = list.get_player_info(player_id)?;
 
         let party = info.party.read().unwrap();
-        let game = try!(party.get_game());
+        let game = party.get_game()?;
         Ok(game.current_trick().clone())
     }
 
     pub fn see_last_trick(&self, player_id: u32) -> ManagerResult<trick::Trick> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
+        let info = list.get_player_info(player_id)?;
 
         let party = info.party.read().unwrap();
-        let game = try!(party.get_game());
-        let trick = try!(game.last_trick());
+        let game = party.get_game()?;
+        let trick = game.last_trick()?;
         Ok(trick.clone())
     }
 
     pub fn see_scores(&self, player_id: u32) -> ManagerResult<[i32; 2]> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
+        let info = list.get_player_info(player_id)?;
 
         let party = info.party.read().unwrap();
         Ok(party.scores)
@@ -480,7 +486,7 @@ impl GameManager {
 
     pub fn see_pos(&self, player_id: u32) -> ManagerResult<pos::PlayerPos> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
+        let info = list.get_player_info(player_id)?;
         Ok(info.pos)
     }
 
@@ -490,14 +496,14 @@ impl GameManager {
 
         trace!("Player leaving: {}", player_id);
 
-        try!(list.remove(player_id));
+        list.remove(player_id)?;
 
         Ok(())
     }
 
     // Waits until the given event_id happens
     pub fn wait(&self, player_id: u32, event_id: usize) -> ManagerResult<Event> {
-        let res = try!(self.get_wait_result(player_id, event_id));
+        let res = self.get_wait_result(player_id, event_id)?;
 
         // TODO: add a timeout (~15s?)
 
@@ -510,11 +516,10 @@ impl GameManager {
     }
 
     // Check if the event ID is already available.
-    // If not, returns a channel that will produce it one
-    // day, so that we don't keep the locks while waiting.
+    // If it's not,
     fn get_wait_result(&self, player_id: u32, event_id: usize) -> ManagerResult<WaitResult> {
         let list = self.party_list.read().unwrap();
-        let info = try!(list.get_player_info(player_id));
+        let info = list.get_player_info(player_id)?;
 
         let party = info.party.read().unwrap();
 

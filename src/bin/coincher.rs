@@ -1,14 +1,14 @@
+extern crate clap;
 extern crate coinched;
 extern crate libcoinche;
-extern crate clap;
 
+use clap::{App, Arg};
+use coinched::client;
+use coinched::EventType;
+use libcoinche::{bid, cards, pos};
 use std::io;
 use std::io::{BufRead, Write};
 use std::str::FromStr;
-use libcoinche::{bid, cards, pos};
-use coinched::EventType;
-use coinched::client;
-use clap::{Arg, App};
 
 struct CliFrontend {
     hand: cards::Hand,
@@ -106,10 +106,10 @@ impl client::Frontend<client::http::HttpBackend> for CliFrontend {
 
     fn game_over(&mut self, points: [i32; 2], winner: pos::Team, scores: [i32; 2]) {
         println!("Game over!");
-        println!("{:?} won. Points were {:?} ; scores: {:?}",
-                 winner,
-                 points,
-                 scores);
+        println!(
+            "{:?} won. Points were {:?} ; scores: {:?}",
+            winner, points, scores
+        );
     }
 
     fn show_pass(&mut self, pos: pos::PlayerPos) {
@@ -121,10 +121,12 @@ impl client::Frontend<client::http::HttpBackend> for CliFrontend {
     }
 
     fn show_bid(&mut self, pos: pos::PlayerPos, suit: cards::Suit, target: bid::Target) {
-        println!("Player {:?} bid {} on {}",
-                 pos,
-                 target.to_string(),
-                 suit.to_string());
+        println!(
+            "Player {:?} bid {} on {}",
+            pos,
+            target.to_string(),
+            suit.to_string()
+        );
     }
 
     fn ask_bid(&mut self) -> client::AuctionAction {
@@ -175,21 +177,21 @@ impl client::Frontend<client::http::HttpBackend> for CliFrontend {
 
         self.print_hand();
 
-
         println!("First player: {:?}", first);
     }
 }
 
 fn main() {
     let matches = App::new("coincher")
-                      .version(env!("CARGO_PKG_VERSION"))
-                      .author("Alexandre Bury <alexandre.bury@gmail.com>")
-                      .about("A client for coinched")
-                      .arg(Arg::with_name("HOST")
-                               .help("Specifies the host to connect to")
-                               .required(true)
-                               .index(1))
-                      .get_matches();
+        .version(env!("CARGO_PKG_VERSION"))
+        .author("Alexandre Bury <alexandre.bury@gmail.com>")
+        .about("A client for coinched")
+        .arg(
+            Arg::with_name("HOST")
+                .help("Specifies the host to connect to")
+                .required(true)
+                .index(1),
+        ).get_matches();
     let host = matches.value_of("HOST").unwrap();
 
     // TODO: allow reconnecting to an existing game
@@ -197,6 +199,6 @@ fn main() {
     let backend = client::http::HttpBackend::join(host).unwrap();
     let mut frontend = CliFrontend::new(backend.pos);
 
-    println!("Final score: {:?}",
-             client::Client::new(backend).run(&mut frontend));
+    let score = client::Client::new(backend).run(&mut frontend);
+    println!("Final score: {:?}", score);
 }

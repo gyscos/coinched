@@ -1,25 +1,34 @@
-use libcoinche::{pos, bid, cards};
-use {EventType, ContractBody, CardBody};
+use crate::{CardBody, ContractBody, EventType};
+use libcoinche::{bid, cards, pos};
 
-pub mod http;
 mod client;
+// pub mod http;
 
-pub use self::client::Client;
+pub use self::client::{run, Client};
 
+#[derive(Serialize, Deserialize)]
 pub enum AuctionAction {
     Leave,
     Pass,
     Coinche,
-    Bid((cards::Suit, bid::Target)),
+    Bid {
+        trump: cards::Suit,
+        target: bid::Target,
+    },
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum GameAction {
     Leave,
-    PlayCard(cards::Card),
+    PlayCard { card: cards::Card },
 }
 
-/// Any frontend mush have these global callbacks
-pub trait Frontend<B: Backend> {
+/// The frontend is the part of the client that interacts with the player.
+///
+/// The backend will
+pub trait Frontend {
+    type B: Backend;
+
     fn show_error(&mut self, error: B::Error);
     fn unexpected_event(&mut self, event: EventType);
     fn party_cancelled(&mut self, msg: &str);
@@ -34,7 +43,6 @@ pub trait Frontend<B: Backend> {
     fn show_coinche(&mut self, pos: pos::PlayerPos);
     fn show_bid(&mut self, pos: pos::PlayerPos, suit: cards::Suit, target: bid::Target);
 
-
     /// Auction cancelled, back to the start.
     fn auction_cancelled(&mut self);
     /// Auction is complete, we can play now!
@@ -43,6 +51,7 @@ pub trait Frontend<B: Backend> {
     fn start_game(&mut self, first: pos::PlayerPos, hand: cards::Hand);
 }
 
+/// The backend is the part of the client that interacts with the server.
 pub trait Backend {
     type Error;
 

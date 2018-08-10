@@ -1,0 +1,3 @@
+* Replace Iron http server with warp
+* Replace hyper http client with reqwest
+* Replace eventual::Future with... CondVar?
